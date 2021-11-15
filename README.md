@@ -32,6 +32,7 @@ drwxr-xr-x 3 root root 4096 Mei 29 11:27 ..
 Explain how you would solve this issue as detailed as you need it to be. Feel free to add
 assumptions as needed.
 **Answer:**
+
 It is obvious that apache is lack of permission to read the index.html file.
 The index.html is owned by root. It is not recommended settings.
 It is likely that nginx doesnt belong to www-data group.
