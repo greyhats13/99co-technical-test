@@ -42,10 +42,10 @@ assumptions for the information that’s not given here.
 <p align="center">
   <img src="img/502-bad-gateway.png" alt="Infrastructure Diagram Images">
 </p>
-When the client receives error __502 Bad Gateway__ , how would you like to troubleshoot to fix
+
+When the client receives error **502 Bad Gateway** , how would you like to troubleshoot to fix
 the issue to point out the root problem? You can be as detailed as possible and use
 assumptions for the information that’s not given here.
-
 
 # Part C
 ## Infrastructure Diagram
