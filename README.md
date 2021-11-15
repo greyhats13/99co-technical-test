@@ -22,7 +22,7 @@ skills.
 */var/www/html/index.html is forbidden (13: Permission denied).*
 
 Doing an ls -la on /var/www/html returns the following result:
-```bash
+```console
 /var/www/html$ ls -al
 total 12
 drwxr-xr-x 2 root root 4096 Jul 8 09:47 .
@@ -33,7 +33,9 @@ Explain how you would solve this issue as detailed as you need it to be. Feel fr
 assumptions as needed.
 **Answer:**
 It is obvious that apache is lack of permission to read the index.html file. We can issue
-```bashchmod 775 /var/www/html/index.html``` to the file so Apache can have read permission on index.html file
+```console
+chmod 775 /var/www/html/index.html```
+to the file so Apache can have read permission on index.html file
 
 2. There’s a production database on server A that can only be accessed from server B. A
 database engineer needs to access the database regularly on server A but only has the
