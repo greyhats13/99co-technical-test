@@ -48,7 +48,7 @@ It is recommended that the /var/www/html and the file inside belong to *www-data
 sudo chown -R www-data:www-data /var/www/html
 ```
 To align with the best practise, we should assign the 775 permission to the /var/www/html directory.
-In numerical mode, 775 stands for
+In numerical mode, if we map the number to the binary, 775 would stands for
 ```
 Owner:  7 - 111 - read, write, and execute
 Group:  5 - 101 - read and execute
@@ -58,8 +58,8 @@ Last but not least, /var/www/html/index.html must be assigned 644 permission
 and 644 permission to the index.html which means
 ```
 Owner:  6 - 110 - read and write,
-Group:  4 - 101 - read only,
-Others: 4 - 101 - read only
+Group:  4 - 100 - read only,
+Others: 4 - 100 - read only
 ```
 We can accomplished those in one command line below:
 ```console
