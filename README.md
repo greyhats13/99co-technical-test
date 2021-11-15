@@ -31,6 +31,9 @@ drwxr-xr-x 3 root root 4096 Mei 29 11:27 ..
 ```
 Explain how you would solve this issue as detailed as you need it to be. Feel free to add
 assumptions as needed.
+**Answer:**
+It is obvious that apache is lack of permission to read the index.html file. We can issue
+```bashchmod 775 /var/www/html/index.html``` to the file so Apache can have read permission on index.html file
 
 2. There’s a production database on server A that can only be accessed from server B. A
 database engineer needs to access the database regularly on server A but only has the
