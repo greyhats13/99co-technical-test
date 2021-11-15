@@ -73,24 +73,34 @@ database engineer needs to access the database regularly on server A but only ha
 permission to connect to server B. Explain how you would set the environment for the
 database engineer to connect to server A. You can be as detailed as possible and use
 assumptions for the information that’s not given here.
+
 **Answer:**
-Let's assume that the production server is running in the public cloud, database is using MySQL engine, and his client is using Linux or MacOs.
+
+Let's assume that the production server is running in the public cloud AWS, database is using MySQL engine, and his client is using Linux or MacOs.
 We must setup the environment as secure as possible.
-Server B will act as Bastion host and it will be placed in public subnet that is routed to the internet gateway. Server A itslef will be placed in private subnet that will be routed to NAT gateway, and NAT gateway itself it routed to the internet gateway. So server A can't be accessed outside, but can perform update/patch to the internet.
-* Setup Database engineer client to Server B.
-A database engineer have access to server B means ,at least, he has SSH access to the production server.
-However, we want the database engineer to establish secure connection to the server B.
-Database engineer need his/her own SSH key using OpenSSH using *ssh-keygen*.
-His/Her private key must be assign with *chmod 400 ~/.ssh/id_rsa* and then put his/her public key to the ~/.ssh/authorized_keys in server B.
-* Restrict IP access to the Server B
-Due to server B is accessible through the internet, Server B access must be limited to spesific public IP range that belong to the organization/company. As we assume that the server is running in the cloud, we can restrict the access to the server B using security group (firewall) to only allow inbound rule TCP 22 and specified IP range.
-* Server B access to the Server A (Production DB)
-Let's say the Server A is our self-hosted MySQL database. We can only allow Server B private IP to access TCP 22 to server A, but server A can be accessed with TCP 3306 (MySQL Port) from the internal network or VPC (Virtual Private Cloud).
-But what if the Production DB is managed database by public cloud such as AWS? It is pretty unlikely that managed database allow SSH access the instance. So we must only allow the TCP 22 open to the internal network or VPC.
-* Secure database server A in transit and at rest.
+Server B will act as Bastion host and it will be placed in public subnet that is routed to the internet gateway. Server A itslef will be placed in private subnet that will be routed to NAT gateway, and NAT gateway itself is routed to the internet gateway. So server A can't be accessed outside, but can perform update/patch to the internet. Server A production will be secured in transit and at rest.
+The proposed solution based on assumption is depicted below.
 <p align="center">
   <img src="img/database.svg" alt="database">
 </p>
+
+* Setup Database engineer client to Server B.
+
+A database engineer have access to server B means ,at least, he has SSH access to the production server.
+However, we want the database engineer to establish secure connection to the server B.
+Database engineer need his/her own SSH key using OpenSSH using *ssh-keygen*.
+His/Her private key must be assign with *chmod 400 ~/.ssh/id_rsa* and then put his/her public key to the *~/.ssh/authorized_keys* in server B.
+
+* Restrict IP access to the Server B
+
+Due to server B is accessible through the internet, Server B access must be limited to spesific public IP range that belong to the organization/company. As we assume that the server is running in the cloud, we can restrict the access to the server B using security group (firewall) to only allow inbound rule TCP 22 and specified IP range.
+
+* Server B access to the Server A (Production DB)
+
+Let's say the Server A is our self-hosted MySQL database. We can only allow Server B private IP to access TCP 22 to server A, but server A can be accessed with TCP 3306 (MySQL Port) from the internal network or VPC (Virtual Private Cloud).
+But what if the Production DB is managed database by public cloud such as AWS? It is pretty unlikely that managed database allow SSH access the instance. So we must only allow the TCP 22 open to the internal network or VPC.
+
+* Secure database server A in transit and at rest.
 
 3. Assume we have setup a service with the following layers:
 <p align="center">
