@@ -3,16 +3,30 @@
 
 # Part A
 1. Tell us about your main motivation to pursue a career in the software industry!
+**Answer:**
+I always believe that IT software industry is the next big things today. 
 2. Tell us about your strengths that help your profession as a software engineer and how do
 you take advantage of them to become a better engineer!
+**Answer:**
+- I am a fast learner. I believe with good fundamentals, good logics, and english, I can learn almost anything. So I am never afraid to invest for Linked Learning, Cloud Guru for 1 year subscription.
+- I am good team player. I love to share ideas, coaching my apprentice, and join the Tech communities. It allow me to learn new things, pick some lesson, get new insights
+- 
 3. Tell us about your weaknesses that give you challenges and what are your efforts to
 overcome them!
+- Most of the time, I forget time when working to debug an error that I can't solved for days especialy when the error is not available in Stackoverflow. So, when I feel I am in a dead end. I try to ask to the community, trying to reread the documentation, and share the error to my co-worker and ask for assistance.
+- I am quite perfectionist. 
 4. Tell us about the most challenging project that you have worked on and what efforts or
 strategies you use to solve the problems you met in that project!
+- Axis Modernization: Network Readiness. In this project, I must establish connection between AWS and XL onpremise datacenter and provision them using Terraform. I had little knowledge on Onpremise network and still green at using Terraform at the time and yet I must deliver them in strict timeline (it is about 2 weeks). My stategy was to cut my learning curves using medium.com and some in AWS docs to learn about AWS Transit Gateway, AWS S2S VPN and AWS DirectConnect.. Fortunately, I found the right use case in medium.com to deliver my task and I can make it in 2 weeks.
 5. Tell us about external factors that you would consider ideal to help you become a more
 effective engineer!
+- Good environment and team that is open-minded and love to embrance new ideas.
+- Good role model in my workplace that can help me to grow better, adapt new mindset and new framework as well as new insights.
+- Company business model. I love to work on a company that make serious impact to the society. It encourages me to give my best. 
 6. Tell us about how you see yourself in the next five years in software industry!
+- I would love to see myself as Head of Engineer in the next five years or at least as DevOps Lead. I would love to someday to design the company technology roadmap for product, app, and infrastructure design that is really fit the business model and user demand as well as adapting to the latest tech and in-line with industry best practises.
 7. What do you think about DevOps ?
+- DevOps is a culture that break the silo between Ops and Development.
 
 # Part B
 Part B
@@ -76,9 +90,18 @@ assumptions for the information that’s not given here.
 
 **Answer:**
 
-Let's assume that the production server is running in the public cloud AWS, database is using MySQL engine, and his client is using Linux or MacOs.
-We must setup the environment as secure as possible.
-Server B will act as Bastion host and it will be placed in public subnet that is routed to the internet gateway. Server A itslef will be placed in private subnet that will be routed to NAT gateway, and NAT gateway itself is routed to the internet gateway. So server A can't be accessed outside, but can perform update/patch to the internet. Server A production will be secured in transit and at rest.
+**Assumption**
+
+Let's assume that the production server is 
+- running in the public cloud AWS, 
+- Database is managed Amazon RDS and running in port 3306, 
+- and database engineer client is using Linux or MacOs, 
+- Organization VPN IP range is 206.189.38.216/29
+- VPC CIDR 10.0.0.0/16, Public Subnet CIDR: 10.0.0.0/24, Private Subnet: 10.0.1.0/24
+- We must setup the environment as secure as possible. Server B will act as Bastion host and it will be placed in public subnet that is routed to the internet gateway
+- Server A itslef will be placed in private subnet that will be routed to NAT gateway, and NAT gateway itself is routed to the internet gateway. So server A can't be accessed outside, but can perform update/patch to the internet. 
+- Server A must be secured as possible.
+
 The proposed solution based on assumption is depicted below.
 <p align="center">
   <img src="img/database.svg" alt="database">
@@ -86,21 +109,28 @@ The proposed solution based on assumption is depicted below.
 
 * Setup Database engineer client to Server B.
 
-A database engineer have access to server B means ,at least, he has SSH access to the production server.
+A database engineer have access to server B means ,at least, he/she has SSH access to the production server.
 However, we want the database engineer to establish secure connection to the server B.
 Database engineer need his/her own SSH key using OpenSSH using *ssh-keygen*.
 His/Her private key must be assign with *chmod 400 ~/.ssh/id_rsa* and then put his/her public key to the *~/.ssh/authorized_keys* in server B.
 
 * Restrict IP access to the Server B
 
-Due to server B is accessible through the internet, Server B access must be limited to spesific public IP range that belong to the organization/company. As we assume that the server is running in the cloud, we can restrict the access to the server B using security group (firewall) to only allow inbound rule TCP 22 and specified IP range.
+Due to server B is accessible through the internet, Server B access must be limited to spesific public IP range that belong to the organization/company. As we assume that the server is running in the cloud, we can restrict the access to the server B using security group (firewall) to only allow inbound rule TCP 22 and 206.189.38.216/29.
 
 * Server B access to the Server A (Production DB)
 
-Let's say the Server A is our self-hosted MySQL database. We can only allow Server B private IP to access TCP 22 to server A, but server A can be accessed with TCP 3306 (MySQL Port) from the internal network or VPC (Virtual Private Cloud).
-But what if the Production DB is managed database by public cloud such as AWS? It is pretty unlikely that managed database allow SSH access the instance. So we must only allow the TCP 22 open to the internal network or VPC.
+If Server A is our self-hosted MySQL database. We can allow Server B private IP to access TCP 22 to server A, but server A can be accessed with TCP 3306 (MySQL Port) from the internal network or VPC (Virtual Private Cloud) so the application can access the Server A.
+As we assumed that the server A is managed database Amazon RDS. It is pretty unlikely that managed database allow SSH access the instance. So we must only allow the TCP 3306 open to the internal network or VPC.
 
 * Secure database server A in transit and at rest.
+
+As we know that, threat doesnt come not only from outside the organization, but it come come from inside such as internal malicious actor. So
+we must secure our production DB both in transit and at rest. Our Database connection must enforce SSL/TLS to encrypt our connection to Production database. 
+```console
+mysql -u <DB_USER> -h <DB_HOST> -P 3306 –ssl-ca=~/ssl-client/ca.pem –ssl-cert=~/ssl-client/client-cert.pem –ssl-key=~/ssl-client/client-key.pem -p<DB_PASS>
+```
+We must also encrypt our database storage using KMS (key management service).
 
 3. Assume we have setup a service with the following layers:
 <p align="center">
