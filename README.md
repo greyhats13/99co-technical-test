@@ -24,7 +24,7 @@ effective engineer!
 - Good role model in my workplace that can help me to grow better, adapt new mindset and new framework as well as new insights.
 - Company business model. I love to work on a company that make serious impact to the society. It encourages me to give my best. 
 6. Tell us about how you see yourself in the next five years in software industry!
-- I would love to see myself as Head of Engineer in the next five years or at least as DevOps Lead. I would love to someday to design the company technology roadmap for product, app, and infrastructure design that is really fit the business model and user demand as well as adapting to the latest tech and in-line with industry best practises.
+- I would love to see myself as Head of Engineer in the next five years or at least as DevOps Lead. So I can design the company technology roadmap for product, app, and infrastructure that is really fit the business model and user demand as well as adapting to the latest tech and in-line with industry best practises.
 7. What do you think about DevOps ?
 - DevOps is a culture that break the silo between Ops and Development.
 
