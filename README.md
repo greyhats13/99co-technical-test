@@ -14,7 +14,24 @@ effective engineer!
 6. Tell us about how you see yourself in the next five years in software industry!
 7. What do you think about DevOps ?
 
-# Infrastructure Diagram
+# Part B
+Part B
+These are very simple technical questions to give us a bit overview on linux and computer network
+skills.
+1. When setting up a new website, the web can’t be accessed. On the Nginx error log returns
+*/var/www/html/index.html is forbidden (13: Permission denied).*
+Doing an ls -la on /var/www/html returns the following result:
+```bash
+/var/www/html$ ls -al
+total 12
+drwxr-xr-x 2 root root 4096 Jul 8 09:47 .
+drwxr-xr-x 3 root root 4096 Mei 29 11:27 ..
+---------- 1 root root 612 Mei 29 11:27 index.html
+```
+
+
+# Part C
+## Infrastructure Diagram
 <p align="center">
   <img src="img/infrastructure-diagram.png" alt="Infrastructure Diagram Images">
 </p>
