@@ -32,11 +32,36 @@ drwxr-xr-x 3 root root 4096 Mei 29 11:27 ..
 Explain how you would solve this issue as detailed as you need it to be. Feel free to add
 assumptions as needed.
 **Answer:**
-It is obvious that apache is lack of permission to read the index.html file. We can issue
+It is obvious that apache is lack of permission to read the index.html file.
+The index.html is owned by root. It is not recommended settings.
+It is likely that nginx doesnt belong to www-data group.
+We can add nginx user to www-data group by issuing this command:
 ```console
-chmod 775 /var/www/html/index.html
+sudo usermod -a -G www-data nginx
 ```
-to the file so Apache can have read permission on index.html file
+To verify that nginx is a part of www-data group, we can issue command:
+```console
+id nginx
+```
+It is recommended that the /var/www/html owner and file inside them to www-data group and user.
+```console
+sudo chown -R www-data:www-data /var/www/html
+```
+To align with the best practise, we should assign the 775 permission to the /var/www/html directory.
+In numerical mode, 775 stands for
+Owner:  7 - 111 - read, write, and execute
+Group:  5 - 101 - read and execute
+Others: 5 - 101 - read and execute.
+Last but not least, /var/www/html/index.html must be assigned 644 permission
+and 644 permission to the index.html which means
+Owner:  6 - 110 - read and write,
+Group:  4 - 101 - read only,
+Others: 4 - 101 - read only.
+We can accomplished those in one command line below:
+```console
+sudo chmod /var/www/html 775 && sudo 644 chmod /var/www/html/index.html
+```
+Eventually, we can assure that Nginx will no longer encounter *permission denied* issue and our solution have followed the best practises.
 
 2. There’s a production database on server A that can only be accessed from server B. A
 database engineer needs to access the database regularly on server A but only has the
@@ -46,7 +71,7 @@ assumptions for the information that’s not given here.
 
 3. Assume we have setup a service with the following layers:
 <p align="center">
-  <img src="img/502-bad-gateway.png" alt="Infrastructure Diagram Images">
+  <img src="img/502-bad-gateway.png" alt="502 bad gateway">
 </p>
 
 When the client receives error **502 Bad Gateway** , how would you like to troubleshoot to fix
