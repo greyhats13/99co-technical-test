@@ -43,20 +43,24 @@ To verify that nginx is a part of www-data group, we can issue command:
 ```console
 id nginx
 ```
-It is recommended that the /var/www/html owner and file inside them to www-data group and user.
+It is recommended that the /var/www/html and the file inside belong to *www-data* group and user.
 ```console
 sudo chown -R www-data:www-data /var/www/html
 ```
 To align with the best practise, we should assign the 775 permission to the /var/www/html directory.
 In numerical mode, 775 stands for
+```
 Owner:  7 - 111 - read, write, and execute
 Group:  5 - 101 - read and execute
-Others: 5 - 101 - read and execute.
+Others: 5 - 101 - read and execute
+```
 Last but not least, /var/www/html/index.html must be assigned 644 permission
 and 644 permission to the index.html which means
+```
 Owner:  6 - 110 - read and write,
 Group:  4 - 101 - read only,
-Others: 4 - 101 - read only.
+Others: 4 - 101 - read only
+```
 We can accomplished those in one command line below:
 ```console
 sudo chmod /var/www/html 775 && sudo 644 chmod /var/www/html/index.html
