@@ -34,7 +34,8 @@ assumptions as needed.
 **Answer:**
 It is obvious that apache is lack of permission to read the index.html file. We can issue
 ```console
-chmod 775 /var/www/html/index.html```
+chmod 775 /var/www/html/index.html
+```
 to the file so Apache can have read permission on index.html file
 
 2. There’s a production database on server A that can only be accessed from server B. A
