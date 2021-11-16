@@ -1,0 +1,122 @@
+# Default values for balance.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+podAnnotations:
+  prometheus.io/scrape: "false"
+
+image:
+  repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-h-prd:latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+appConfig:
+  APP_PORT: 8080
+  DB_HOST: db.99.co:3306
+  DB_NAME: 99co
+  DB_USER: 99co-service-h
+  DB_PORT: 3306
+  REDIS_HOST: cache.99.co:6379
+appSecret:
+  DB_PASS: service_h
+  REDIS_PASS: service_h
+
+service:
+  type: ClusterIP
+  port: 8080
+  dstPort: 8080
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: kong
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prd
+    ingressClassName: kong
+  hosts:
+    - host: e.service.api.99.co
+      paths: []
+  tls:
+    - secretName: 99co-service-h-ssl
+      hosts:
+        - e.service.api.99.co
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaller:
+  replicas:
+    min: 2
+    max: 256
+  utilization:
+    cpu: 75
+    memory: 75
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  successThreshold: 1
+  timeoutSeconds: 3
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  successThreshold: 1
+  timeoutSeconds: 3
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: false
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+    # name: blast-sa
+    # namespace: blast
+    # secrets:
+    # - name: blast-secret
+
+# podSecurityContext: {}
+  # fsGroup: 2000
+
+# securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+    # kubernetes.io/tls-acme: "true"
+  # hosts:
+  #   - host: chart-example.local
+  #     paths: []
+  # tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+nodeSelector:
+  service: backend
+
+# tolerations: []
+
+# affinity: {}

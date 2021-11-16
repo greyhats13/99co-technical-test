@@ -214,9 +214,17 @@ conditions, tell us:
 - the strategy/approach that you are going to use to handle high usage but keep the system
 reaching uptime 99.9%.
 
-Assume your solution is set up on Kubernetes in Google Cloud Platform or GKE (don’t set up the
+Assume your solution is set up on Kubernetes in AWS EKS (don’t set up the
 solution on real infrastructure by the way!!!). You can use diagrams to help illustrate your
 explanation. Feel free to add assumptions.
+
+# Technology Stack
+- AWS for public cloud
+- Kubernetes for Container orchestration
+- Helm for kubernetes deployment
+- Github for repository and Jenkins for CI
+- Weave Flux for CD that is aligned with GitOps principle
+- ElasticCloud for Observability such as realtime monitoring, analytics, APM, and logging.
 
 **Answer:**
 
@@ -227,7 +235,9 @@ explanation. Feel free to add assumptions.
 - Frontend service is using reactjs
 - FrontEnd Service J, K, L, M and Backend service N, P, Q, R is legacy service because not leveraging API gateway.
 
-## Infrastructure Diagram
+# A. How would you design the system given requirement?
+
+# Infrastructure Diagram
 Here's diagram for the propposed solution
 <p align="center">
   <img src="img/infrastructure-diagram.png" alt="Infrastructure Diagram Images">
@@ -252,14 +262,10 @@ cidr_block        = cidrsubnet(aws_vpc.vpc.cidr_block, 8, count.index + 1 * (len
 to generate **10.0.x.0/24 subnet CIDR block equally for public, node, app, and data nodes equally.
 We also have configured the routing to NAT and Internet Gateway.
 - Our kubernetes node worker be placed in node subnet
-- Our kubernetes app (pod) will be placed 
+- Our kubernetes app (pod) will be placed in app subnet
+- Last but not least, our Amazon Aurora MySQL, Elasticache Redis, and Our MSK Kafka will be placed in data subnet accordingly.
 
 ```terraform
-provider "aws" {
-  region  = var.region
-  profile = "${var.unit}-${var.env}"
-}
-
 resource "aws_vpc" "vpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
@@ -449,4 +455,137 @@ resource "aws_route_table_association" "db_rta" {
   subnet_id      = element(aws_subnet.db_subnet.*.id, count.index)
   route_table_id = element(aws_route_table.db_rt.*.id, count.index)
 }
+```
+
+# Elastic Kubernetes Service
+
+```terraform
+
+```
+
+# CI/CD
+Here's our CI/CD diagram for the proposed solution
+<p align="center">
+  <img src="img/ci-cd-diagram.png" alt="CI CD Diagram">
+</p>
+We have four repositories:
+
+1. frontend -> services A, B, C, D
+2. backend -> services E, F, G, H
+3. frontend legacy -> J, K, L, M
+4. backend legacy -> N, P, Q, R
+
+Every repository will contain services folder name.
+For instance for backend repository will contain four folder which is
+- service_e
+- service_f
+- service_g
+- service_h
+
+Each service folder will have their own Dockerfile
+
+
+Sample Dockerfile for service E that located at /service_e/Dockerfile:
+```dockerfile
+FROM golang:1.15.2-alpine3.12 AS builder
+
+RUN apk update && apk add --no-cache git
+
+WORKDIR $GOPATH/src/service_e/
+
+RUN go get github.com/go-sql-driver/mysql && go get github.com/gin-gonic/gin && go get github.com/jinzhu/gorm
+
+COPY . .
+
+RUN GOOS=linux GOARCH=amd64 go build -o /go/bin/service_e
+
+FROM alpine:3.12
+
+RUN apk add --no-cache tzdata
+
+COPY --from=builder /go/bin/book /go/bin/service_e
+
+#Just for an example. The environment variables will be defined in Configmap helm.
+ENV PORT 8080
+ENV DB_USER service_e
+ENV DB_PASS pass
+ENV DB_HOST db.99.co
+ENV DB_PORT 3306
+ENV DB_NAME service_e
+
+EXPOSE 8080
+
+ENTRYPOINT ["/go/bin/service_e"]
+```
+
+Codebuild Buildspecs file for CI
+```yaml
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo install steps...
+  pre_build:
+    commands:
+      - ls -la
+
+      - echo Check AWS, Git, Python version
+      - aws --version && git --version
+      - echo Check ENV Variable
+      - printenv
+      - echo Logging into AWS ECR...
+      - $(aws ecr get-login --no-include-email --region ap-southeast-1)
+      - SERVICE_E_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd
+      - SERVICE_F_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-f-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-g-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-h-prd
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build_push:
+    commands:
+      # Get Commit Hash from SCM
+      - PREV=$(cat $CODEBUILD_RESOLVED_SOURCE_VERSION)
+      # Check the different between Head and working directory in commit
+      # Check the filechanged in which directory on Repository Backend
+      # If the filechanged detect at /services_e for instances. CD to /services_e directory  and start build, tag, and push to Docker Registr ECR
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_e/")" != "" ]; then
+          echo "Build, Tag, and Push Services F" &&
+          cd $CODEBUILD_SRC_DIR/services_e &&
+          cd $CODEBUILD_SRC_DIR/services_e/ &&
+          docker build -t $SERVICE_E_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_E_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_E_URI:latest &&
+          docker push $SERVICE_E_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_f/")" != "" ]; then
+          echo "Build, Tag, and Push Services F" &&
+          cd $CODEBUILD_SRC_DIR/services_f &&
+          cd $CODEBUILD_SRC_DIR/services_f/ &&
+          docker build -t $SERVICE_F_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_F_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_F_URI:latest &&
+          docker push $SERVICE_F_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_g/")" != "" ]; then
+          echo "Build, Tag, and Push Services G" &&
+          cd $CODEBUILD_SRC_DIR/services_g &&
+          cd $CODEBUILD_SRC_DIR/services_g/ &&
+          docker build -t $SERVICE_G_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_G_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_G_URI:latest &&
+          docker push $SERVICE_G_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_h/")" != "" ]; then
+          echo "Build, Tag, and Push Services H" &&
+          cd $CODEBUILD_SRC_DIR/services_h &&
+          cd $CODEBUILD_SRC_DIR/services_h/ &&
+          docker build -t $SERVICE_H_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_H_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_H_URI:latest &&
+          docker push $SERVICE_H_URI:$IMAGE_TAG &&
+        fi
 ```

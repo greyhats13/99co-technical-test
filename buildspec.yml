@@ -1,0 +1,68 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo install steps...
+  pre_build:
+    commands:
+      - ls -la
+
+      - echo Check AWS, Git, Python version
+      - aws --version && git --version
+      - echo Check ENV Variable
+      - printenv
+      - echo Logging into AWS ECR...
+      - $(aws ecr get-login --no-include-email --region ap-southeast-1)
+      - SERVICE_E_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd
+      - SERVICE_F_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-f-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-g-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-h-prd
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+  build_push:
+    commands:
+      # Get Commit Hash from SCM
+      - PREV=$(cat $CODEBUILD_RESOLVED_SOURCE_VERSION)
+      # Check the different between Head and working directory in commit
+      # Check the filechanged in which directory on Repository Backend
+      # If the filechanged detect at /services_e for instances. CD to /services_e directory  and start build, tag, and push to Docker Registr ECR
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_e/")" != "" ]; then
+          echo "Build, Tag, and Push Services F" &&
+          cd $CODEBUILD_SRC_DIR/services_e &&
+          cd $CODEBUILD_SRC_DIR/services_e/ &&
+          docker build -t $SERVICE_E_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_E_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_E_URI:latest &&
+          docker push $SERVICE_E_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_f/")" != "" ]; then
+          echo "Build, Tag, and Push Services F" &&
+          cd $CODEBUILD_SRC_DIR/services_f &&
+          cd $CODEBUILD_SRC_DIR/services_f/ &&
+          docker build -t $SERVICE_F_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_F_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_F_URI:latest &&
+          docker push $SERVICE_F_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_g/")" != "" ]; then
+          echo "Build, Tag, and Push Services G" &&
+          cd $CODEBUILD_SRC_DIR/services_g &&
+          cd $CODEBUILD_SRC_DIR/services_g/ &&
+          docker build -t $SERVICE_G_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_G_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_G_URI:latest &&
+          docker push $SERVICE_G_URI:$IMAGE_TAG &&
+        fi
+      - |
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_h/")" != "" ]; then
+          echo "Build, Tag, and Push Services H" &&
+          cd $CODEBUILD_SRC_DIR/services_h &&
+          cd $CODEBUILD_SRC_DIR/services_h/ &&
+          docker build -t $SERVICE_H_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_H_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_H_URI:latest &&
+          docker push $SERVICE_H_URI:$IMAGE_TAG &&
+        fi
