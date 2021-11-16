@@ -161,7 +161,7 @@ However, let us identify the problem in every layer that might exist:
 So, the security group inbound role must allow TCP 8080 to the load balancer.
 
 **Nginx Load Balancer**
-Nginx configuration must proxy pass *http://localhost:8080/* 
+- Nginx configuration must proxy pass *http://localhost:8080/* 
 we can check the nginx default configuration by issuing the command:
 ```console
 sudo cat /etc/nginx/sites-enabled/default
@@ -186,7 +186,7 @@ server {
 }
 ```
 **PHP Backend Service**
-If the backend service failed, Nginx will not received any data from it. It will result the 502 bad gateway because nginx is depend on backend service. We can restart the application to make the application work by issuing the following command.
+- If the backend service failed, Nginx will not received any data from it. It will result the 502 bad gateway because nginx is depend on backend service. We can restart the application to make the application work by issuing the following command.
 
 ```console
  kill -9 $(pgrep php-fpm)
