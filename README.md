@@ -198,7 +198,7 @@ This part helps us to understand how you would design and build a scalable syste
 serve millions of users per month.
 
 <p align="center">
-  <img src="img/database.svg" alt="database">
+  <img src="img/part-c-diagram.svg" alt="part c diagram">
 </p>
 
 Let’s imagine we are going to build a Restful API system that can be accessed securely from the
@@ -827,11 +827,16 @@ resource "aws_elasticache_replication_group" "elasticache" {
 }
 ```
 
-# CI/CD
+# Continous Integration (Codepipeline) and Continous Delivery (Flux) using GitOps
+Our Continous Integration leverage AWS codepipeline with Codebuild and Github as the Source Control Management.
+
+Our Continous Delivery will adopt GitOps principle and Pull Model where Git would be the single source of truth. Our Continous Integration will use AWS Codepipeline and Codebuild to produce the artifact. Our CD will use Weave Flux. We will bootstrapping flux to our K8s cluster so Flux controller such as Source Controller and Helm controller will handle the deployment automatically. Flux will keep sync to our Github to examine the desired state, and automatically will deploy to the actual state  to our k8s cluster.
 Here's our CI/CD diagram for the proposed solution
 <p align="center">
   <img src="img/ci-cd-diagram.png" alt="CI CD Diagram">
 </p>
+
+# Continous Integration
 We have four repositories:
 
 1. frontend -> services A, B, C, D
@@ -952,6 +957,438 @@ phases:
           docker push $SERVICE_H_URI:$IMAGE_TAG &&
         fi
 ```
-# Continous Delivery GitOPs
+# Helm Chart
 
-Our CI/CD will adopt GitOps principle and Pull Model where Git would be the single source of truth. Our Continous Integration will use AWS Codepipeline and Codebuild to produce the artifact. Our CD will use Weave Flux. We will bootstrapping flux to our K8s cluster so Flux controller such as Source Controller and Helm controller will handle the deployment automatically. Flux will keep sync to our Github to examine the desired state, and automatically will deploy to the actual state  to our k8s cluster.
+**Deployment**
+Our deployment automatically has been set to get Env from our Configmap and Secret.
+Here's sample deployment for our Service E:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "99co-service-e.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "99co-service-e.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- range $key, $value := .Values.podAnnotations }}
+        {{ $key }}: {{ $value | quote }}
+        {{- end }}
+      labels:
+        {{- include "99co-service-e.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ .Values.image.repository }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}
+            - secretRef:
+                name: {{ .Release.Name }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.dstPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+```
+
+**Service**
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.dstPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "99co-service-e.selectorLabels" . | nindent 4 }}
+```
+
+**Ingress**
+
+This our ingress template. One of our backend service not using API gateway, we can assign them to Nginx Ingress class, not Kong Ingress class.
+```yaml
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := .Release.Name -}}
+{{- $svcPort := .Values.service.port -}}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: networking.k8s.io/v1
+{{- else -}}
+apiVersion: networking.k8s.io/v1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "99co-service-e.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  rules:
+  {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $svcPort }}
+            pathType: Prefix
+  tls:
+    - hosts:
+        - {{ .host | quote }}
+      secretName: {{ $fullName }}
+  {{- end }}
+{{- end }}
+```
+
+**Configmap**
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+data:
+   {{- range $key, $value := .Values.appConfig }}
+   {{ $key }}: {{ $value | quote }}
+   {{- end }}
+
+**Secret**
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+data:
+{{- range $key, $val := .Values.appSecret }}
+  {{ $key }}: {{ $val | b64enc | quote }}
+{{- end }}
+type: Opaque
+
+**Horizontal Pod Autoscaler**
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}
+  minReplicas: {{ .Values.autoscaller.replicas.min }}
+  maxReplicas: {{ .Values.autoscaller.replicas.max }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaller.utilization.cpu }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.autoscaller.utilization.memory }}
+
+**Values**
+
+Here's the example for our Backend Service E for our Helm charts.
+We can configure, deployment, service,ingress, HPA in the values.yaml as well as our service configmap and secrets.
+One of our backend service not using API gateway, we can assign them to Nginx Ingress class, not Kong Ingress class.
+Our service E is leveraging API gateway to secure their APIs. So we will assig "kong" as their ingress class.
+We must assign Kong on the ingress annotation.
+```yaml
+replicaCount: 2
+
+podAnnotations:
+  prometheus.io/scrape: "false"
+
+image:
+  repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:latest
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+appConfig:
+  APP_PORT: 8080
+  DB_HOST: db.99.co:3306
+  DB_NAME: 99co
+  DB_USER: 99co-service-e
+  DB_PORT: 3306
+  REDIS_HOST: cache.99.co:6379
+appSecret:
+  DB_PASS: service_e
+  REDIS_PASS: service_e
+
+service:
+  type: ClusterIP
+  port: 8080
+  dstPort: 8080
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: kong
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prd
+    ingressClassName: kong
+    konghq.com/plugins: kong-rate-limit
+  hosts:
+    - host: e.service.api.99.co
+      paths: []
+  tls:
+    - secretName: 99co-service-e-ssl
+      hosts:
+        - e.service.api.99.co
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaller:
+  replicas:
+    min: 2
+    max: 256
+  utilization:
+    cpu: 75
+    memory: 75
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  successThreshold: 1
+  timeoutSeconds: 3
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  successThreshold: 1
+  timeoutSeconds: 3
+
+nodeSelector:
+  service: backend
+```
+
+# API Gateway and Ingress Controller
+As we have assigned Kong as Ingress controller. We can add plugin by adding KongPlugin in our ingress annotation
+```yaml
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: kong
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prd
+    ingressClassName: kong
+    konghq.com/plugins: kong-rate-limit
+  hosts:
+    - host: e.service.api.99.co
+      paths: []
+  tls:
+    - secretName: 99co-service-e-ssl
+      hosts:
+        - e.service.api.99.co
+```
+If We can set Kong Plugin for rate limit to secure our API gateway
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: kong-rate-limit
+config: 
+  second: 5
+  hour: 10000
+  policy: local
+plugin: rate-limiting
+```
+
+# Flux
+We can setup installation of Flux using Terraform to keep aligning with GitOps principle (Git must be source of truth).
+In this terraform script, we will bootstrapping Flux to our kubernetes cluster to deploy flux controller.
+Then, it will sync the Git repository that we provision here. Flux will sync to the path that we specified e.g helm/.
+```terraform
+provider "aws" {
+  region  = var.region
+  profile = "${var.unit}-${var.env}"
+}
+
+provider "flux" {}
+
+provider "kubectl" {}
+
+# The kubernetes credentials such certificate can be get from our Terraform EKS output.
+# assign them to provider kubernetes args
+provider "kubernetes" {
+  host                   = aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.cluster.certificate_authority[0].data)
+  exec {
+    api_version = "client.authentication.k8s.io/v1alpha1"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.cluster.name]
+    command     = "aws"
+  }
+}
+
+provider "github" {
+  owner = var.github_owner
+  token = var.github_token
+}
+
+# SSH
+locals {
+  known_hosts = "github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
+}
+
+resource "tls_private_key" "main" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+# Flux
+data "flux_install" "main" {
+  target_path = var.target_path
+}
+
+data "flux_sync" "main" {
+  target_path = var.target_path
+  url         = "ssh://git@github.com/99co/helm-repository.git"
+  branch      = var.branch
+}
+
+# Kubernetes
+resource "kubernetes_namespace" "flux_system" {
+  metadata {
+    name = "flux-system"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].labels,
+    ]
+  }
+}
+
+data "kubectl_file_documents" "install" {
+  content = data.flux_install.main.content
+}
+
+data "kubectl_file_documents" "sync" {
+  content = data.flux_sync.main.content
+}
+
+locals {
+  install = [for v in data.kubectl_file_documents.install.documents : {
+    data : yamldecode(v)
+    content : v
+    }
+  ]
+  sync = [for v in data.kubectl_file_documents.sync.documents : {
+    data : yamldecode(v)
+    content : v
+    }
+  ]
+}
+
+resource "kubectl_manifest" "install" {
+  for_each   = { for v in local.install : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
+  depends_on = [kubernetes_namespace.flux_system]
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "sync" {
+  for_each   = { for v in local.sync : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
+  depends_on = [kubernetes_namespace.flux_system]
+  yaml_body  = each.value
+}
+
+resource "kubernetes_secret" "main" {
+  depends_on = [kubectl_manifest.install]
+
+  metadata {
+    name      = data.flux_sync.main.secret
+    namespace = data.flux_sync.main.namespace
+  }
+
+  data = {
+    identity       = tls_private_key.main.private_key_pem
+    "identity.pub" = tls_private_key.main.public_key_pem
+    known_hosts    = local.known_hosts
+  }
+}
+
+# GitHub
+resource "github_repository" "main" {
+  name       = "helm-repository"
+  visibility = "public"
+  auto_init  = true
+}
+
+resource "github_branch_default" "main" {
+  repository = github_repository.main.name
+  branch     = "main"
+}
+
+resource "github_repository_deploy_key" "main" {
+  title      = "production-cluster"
+  repository = github_repository.main.name
+  key        = tls_private_key.main.public_key_openssh
+  read_only  = true
+}
+
+resource "github_repository_file" "install" {
+  repository = github_repository.main.name
+  file       = data.flux_install.main.path
+  content    = data.flux_install.main.content
+  branch     = "main"
+}
+
+resource "github_repository_file" "sync" {
+  repository = github_repository.main.name
+  file       = data.flux_sync.main.path
+  content    = data.flux_sync.main.content
+  branch     = "main"
+}
+```

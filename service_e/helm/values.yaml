@@ -38,7 +38,14 @@ ingress:
     ingressClassName: kong
   hosts:
     - host: e.service.api.99.co
-      paths: []
+      paths:
+        - /
+        - /list-book
+        - /add-book
+        - /get-book/
+        - /update-book/
+        - /delete-book/
+    
   tls:
     - secretName: 99co-service-e-ssl
       hosts:
