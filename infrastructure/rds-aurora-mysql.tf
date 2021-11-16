@@ -12,12 +12,12 @@ resource "aws_security_group" "sg" {
 
 resource "aws_security_group_rule" "sg_in_tcp" {
   type              = "ingress"
-  from_port         = var.port
-  to_port           = var.port
+  from_port         = 3306
+  to_port           = 3306
   protocol          = "tcp"
-  cidr_blocks       = [data.terraform_remote_state.network.outputs.network_vpc_cidr_block]
+  cidr_blocks       = [aws.vpc.cidr_blocks]
   security_group_id = aws_security_group.sg.id
-  description       = "Allow ingress TCP ${var.port} for ${var.unit}-${var.env}-${var.code}-${var.feature}"
+  description       = "Allow ingress TCP 3306 for ${var.unit}-${var.env}-${var.code}-${var.feature}"
 }
 
 resource "aws_security_group_rule" "sg_eg_all" {
@@ -77,28 +77,28 @@ resource "random_password" "aurora_password" {
 
 resource "aws_rds_cluster" "aurora_cluster" {
   cluster_identifier                  = "${var.unit}-${var.env}-${var.code}-${var.feature}-cluster-${var.region}"
-  engine_mode                         = var.engine_mode
-  engine                              = var.engine
-  engine_version                      = var.engine_version
+  engine_mode                         = "provisioned"
+  engine                              = "aurora-mysql"
+  engine_version                      = "5.7.mysql_aurora.2.10.0"
   availability_zones                  = [data.aws_availability_zones.az.names[0], data.aws_availability_zones.az.names[1]]
-  master_username                     = var.master_username
+  master_username                     = "root"
   master_password                     = random_password.aurora_password.result
-  port                                = var.port
+  port                                = 3306
   db_subnet_group_name                = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids              = [aws_security_group.sg.id]
-  iam_database_authentication_enabled = var.iam_database_authentication_enabled
+  iam_database_authentication_enabled = false
   db_cluster_parameter_group_name     = aws_rds_cluster_parameter_group.cluster_parameter_group.id
-  backup_retention_period             = var.backup_retention_period
-  copy_tags_to_snapshot               = var.copy_tags_to_snapshot
-  storage_encrypted                   = var.storage_encrypted
-  kms_key_id                          = var.storage_encrypted ? data.terraform_remote_state.kms.outputs.kms_key_arn : null
-  backtrack_window                    = var.backtrack_window
-  allow_major_version_upgrade         = var.allow_major_version_upgrade
-  enabled_cloudwatch_logs_exports     = var.enabled_cloudwatch_logs_exports
-  preferred_backup_window             = var.preferred_backup_window
-  deletion_protection                 = var.deletion_protection
-  apply_immediately                   = var.apply_immediately
-  skip_final_snapshot                 = var.skip_final_snapshot
+  backup_retention_period             = 5
+  copy_tags_to_snapshot               = true
+  storage_encrypted                   = true
+  kms_key_id                          = data.terraform_remote_state.kms.outputs.kms_key_arn
+  backtrack_window                    = 0
+  allow_major_version_upgrade         = true
+  enabled_cloudwatch_logs_exports     = ["error", "general", "slowquery"]
+  preferred_backup_window             = "07:00-09:00"
+  deletion_protection                 = true
+  apply_immediately                   = true
+  skip_final_snapshot                 = false
   final_snapshot_identifier           = "${var.unit}-${var.env}-${var.code}-${var.feature}-final-snapshot"
   tags = {
     "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-cluster"
@@ -107,7 +107,7 @@ resource "aws_rds_cluster" "aurora_cluster" {
     "Feature" = var.feature
   }
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
     ignore_changes = [
       engine_version
     ]
@@ -137,24 +137,24 @@ resource "aws_iam_role_policy_attachment" "monitoring_attach_policy" {
 }
 
 resource "aws_rds_cluster_instance" "aurora_instances" {
-  count                           = var.number_of_instance
+  count                           = 2
   identifier                      = "${var.unit}-${var.env}-${var.code}-${var.feature}-instance-${element(data.aws_availability_zones.az.names, count.index)}-${count.index}"
   cluster_identifier              = aws_rds_cluster.aurora_cluster.id
-  instance_class                  = var.instance_class
+  instance_class                  = "db.r5.xlarge"
   engine                          = aws_rds_cluster.aurora_cluster.engine
   engine_version                  = aws_rds_cluster.aurora_cluster.engine_version
   db_parameter_group_name         = aws_db_parameter_group.db_parameter_group.id
-  publicly_accessible             = var.publicly_accessible
+  publicly_accessible             = false
   copy_tags_to_snapshot           = aws_rds_cluster.aurora_cluster.copy_tags_to_snapshot
   promotion_tier                  = count.index
   availability_zone               = element(data.aws_availability_zones.az.names, count.index)
-  performance_insights_enabled    = var.performance_insights_enabled
-  performance_insights_kms_key_id = var.performance_insights_enabled ? data.terraform_remote_state.kms.outputs.kms_key_arn : null
-  monitoring_interval             = var.monitoring_interval
+  performance_insights_enabled    = true
+  performance_insights_kms_key_id = data.terraform_remote_state.kms.outputs.kms_key_arn
+  monitoring_interval             = 60
   monitoring_role_arn             = aws_iam_role.monitoring_role.arn
-  auto_minor_version_upgrade      = var.auto_minor_version_upgrade
-  apply_immediately               = var.apply_immediately
-  ca_cert_identifier              = var.ca_cert_identifier
+  auto_minor_version_upgrade      = true
+  apply_immediately               = true
+  ca_cert_identifier              = "rds-ca-2019"
   tags = {
     "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-instance-${element(data.aws_availability_zones.az.names, count.index)}-${count.index}"
     "Env"     = var.env
@@ -164,11 +164,11 @@ resource "aws_rds_cluster_instance" "aurora_instances" {
 }
 
 resource "aws_appautoscaling_target" "autoscaling_target" {
-  service_namespace  = var.service_namespace
-  scalable_dimension = var.scalable_dimension
+  service_namespace  = "rds"
+  scalable_dimension = "rds:cluster:ReadReplicaCount"
   resource_id        = "cluster:${aws_rds_cluster.aurora_cluster.id}"
-  min_capacity       = var.min_capacity
-  max_capacity       = var.max_capacity
+  min_capacity       = 2
+  max_capacity       = 15
 }
 
 resource "aws_appautoscaling_policy" "autoscaling_policy" {
@@ -176,15 +176,15 @@ resource "aws_appautoscaling_policy" "autoscaling_policy" {
   service_namespace  = aws_appautoscaling_target.autoscaling_target.service_namespace
   scalable_dimension = aws_appautoscaling_target.autoscaling_target.scalable_dimension
   resource_id        = aws_appautoscaling_target.autoscaling_target.resource_id
-  policy_type        = var.policy_type
+  policy_type        = "TargetTrackingScaling"
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
-      predefined_metric_type = var.predefined_metric_type
+      predefined_metric_type = "RDSReaderAverageDatabaseConnections"
     }
 
-    target_value       = var.target_value
-    scale_in_cooldown  = var.scale_in_cooldown
-    scale_out_cooldown = var.scale_out_cooldown
+    target_value       = 750
+    scale_in_cooldown  = 1800
+    scale_out_cooldown = 60
   }
 }
