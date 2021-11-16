@@ -220,9 +220,11 @@ explanation. Feel free to add assumptions.
 **Answer:**
 # Technology Stack
 - AWS for public cloud
+- All our services will use docker container both backend and frontend.
 - Kubernetes for Container orchestration
 - Helm for kubernetes deployment
-- Github for repository and Jenkins for CI
+- Our Docker registry will use Amazon ECR.
+- Github for SCM, and AWS Codepipeline with AWS Codebuild to build our containerized application, tag, and push them to Docke Registry
 - Weave Flux for CD that is aligned with GitOps principle
 - ElasticCloud for Observability such as realtime monitoring, analytics, APM, and logging.
 
@@ -236,7 +238,7 @@ explanation. Feel free to add assumptions.
 # Infrastructure Diagram
 Here's diagram for the propposed solution
 <p align="center">
-  <img src="img/infrastructure-diagram.png" alt="Infrastructure Diagram Images">
+  <img src="img/infrastructure-diagram.svg" alt="Infrastructure Diagram Images">
 </p>
 Image Link: https://lucid.app/lucidchart/2237664e-6e48-4393-b33c-91216df6e8de/edit?viewport_loc=478%2C42%2C3328%2C1646%2C0_0&invitationId=inv_639fc3d3-d6ad-45d3-800e-a0f01f6a23bb
 
@@ -254,6 +256,9 @@ Based what have been designed on the diagram.
 - We have secured all of our infrastructure to encrypt data in transit using SSL/TLS, and at rest using AWS KMS to encrypt our storages such as block(EBS) and object storages (S3)
 - Kubernetes microservice is also implemented Horizontal Pod Autoscaler with minimum 2 and maximum 256 pod and will distributed in two AZs.
 - Our kubernetes also will deploy Kong as ingress controller. By doing that, we can leverage Kong API gateway and its plugin for authentication in API gateway, rate limited, Geo IP restriction, etc.
+- Our infrastructure and application will use ElasticCloud for observability. We will deploy filebeat as log aggregator and metricbeats as Daemon set. Filebeat will forward our log to Logstash. Logstash will parse our STDOUT using Grok Pattern to Elastic Document JSON to store in Elastic Search. So, we can query our them using Kibana to create Insightful Dashboard. We also will deployed APM Server to our EKS cluster.
+- Our Continous Integration will leverage Github as SCM, AWS Codepipeline and AWS Codebuild for Continous delivery to produce docker images and push to ECR
+- We will implement the Gitops for our continous delivery (Pull Model) using Flux. Flux will read our helm manifest that is stored on Github as the single source of truth. Flux will deployed desired state from Git to the actual state (k8s). It can also detect drift that will restore our actual state to the desired sate on git.
 
 # Network
 Here's our infrastructure diagram designed for our AWS network.
@@ -947,3 +952,6 @@ phases:
           docker push $SERVICE_H_URI:$IMAGE_TAG &&
         fi
 ```
+# Continous Delivery GitOPs
+
+Our CI/CD will adopt GitOps principle and Pull Model where Git would be the single source of truth. Our Continous Integration will use AWS Codepipeline and Codebuild to produce the artifact. Our CD will use Weave Flux. We will bootstrapping flux to our K8s cluster so Flux controller such as Source Controller and Helm controller will handle the deployment automatically. Flux will keep sync to our Github to examine the desired state, and automatically will deploy to the actual state  to our k8s cluster.
