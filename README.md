@@ -160,7 +160,7 @@ However, let us identify the problem in every layer that might exist:
 - If the php application port behind nginx load balancer is blocked by the firewall security group. It is likely the nginx will throw an error
 So, the security group inbound role must allow TCP 8080 to the load balancer.
 
-**Nginx Load Balancer**
+**Nginx Configuration**
 - Nginx configuration must proxy pass *http://localhost:8080/* 
 we can check the nginx default configuration by issuing the command:
 ```console
