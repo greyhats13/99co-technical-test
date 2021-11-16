@@ -10,7 +10,6 @@ you take advantage of them to become a better engineer!
 **Answer:**
 - I am a fast learner. I believe with good fundamentals, good logics, and english, I can learn almost anything. So I am never afraid to invest for Linked Learning, Cloud Guru for 1 year subscription.
 - I am good team player. I love to share ideas, coaching my apprentice, and join the Tech communities. It allow me to learn new things, pick some lesson, get new insights
-- 
 3. Tell us about your weaknesses that give you challenges and what are your efforts to
 overcome them!
 - Most of the time, I forget time when working to debug an error that I can't solved for days especialy when the error is not available in Stackoverflow. So, when I feel I am in a dead end. I try to ask to the community, trying to reread the documentation, and share the error to my co-worker and ask for assistance.
@@ -27,6 +26,7 @@ effective engineer!
 - I would love to see myself as Head of Engineer in the next five years or at least as DevOps Lead. So I can design the company technology roadmap for product, app, and infrastructure that is really fit the business model and user demand as well as adapting to the latest tech and in-line with industry best practises.
 7. What do you think about DevOps ?
 - DevOps is a culture that break the silo between Ops and Development.
+- DevOPs allow us to deliver product fast. If we go fast we are very likely to break things but we will break small.
 
 # Part B
 Part B
@@ -141,7 +141,83 @@ When the client receives error **502 Bad Gateway** , how would you like to troub
 the issue to point out the root problem? You can be as detailed as possible and use
 assumptions for the information that’s not given here.
 
+**Answer:**
+
+**Assumption**
+- The solution diagram proposed is deployed in AWS
+- The firewall is using AWS Security Group
+- PHP application is running on port 8080
+- Virtual machine is running Ubuntu OS.
+
+We can actually print the nginx log to figure out the problem by issuing this command:
+
+```console
+sudo tail -30 /var/log/nginx/error.log
+```
+However, let us identify the problem in every layer that might exist:
+
+**Firewall**
+- If the php application port behind nginx load balancer is blocked by the firewall security group. It is likely the nginx will throw an error
+So, the security group inbound role must allow TCP 8080 to the load balancer.
+
+**Nginx Load Balancer**
+Nginx configuration must proxy pass *http://localhost:8080/* 
+we can check the nginx default configuration by issuing the command:
+```console
+sudo cat /etc/nginx/sites-enabled/default
+```
+Let's assume that the configuration output would be like this.
+```nginx
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/html
+    index index.php index.html;
+    server_name _;
+    location / {
+      proxy_set_header X-Request-Id $request_id;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header Host $host;
+      proxy_pass http://localhost:8080/;
+    }
+}
+```
+**PHP Backend Service**
+If the backend service failed, Nginx will not received any data from it. It will result the 502 bad gateway because nginx is depend on backend service. We can restart the application to make the application work by issuing the following command.
+
+```console
+ kill -9 $(pgrep php-fpm)
+ service php7-fpm restart
+```
+
 # Part C
+
+This part helps us to understand how you would design and build a scalable system that could
+serve millions of users per month.
+
+<p align="center">
+  <img src="img/database.svg" alt="database">
+</p>
+
+Let’s imagine we are going to build a Restful API system that can be accessed securely from the
+public, fast enough to respond with sufficient body size, and minimum down time (SLA 99.9%).
+The system also will use common relational databases (such as MySQL, PostgreSQL). With those
+conditions, tell us:
+
+- how you would design the system given the requirements
+- what technologies (open source or 3rd party) you are going to use
+- how you would setup the deployment and namespacing strategy for each repo (1 colour is
+1 repo, so there are 4 repos on the diagram); and
+- the strategy/approach that you are going to use to handle high usage but keep the system
+reaching uptime 99.9%.
+
+Assume your solution is set up on Kubernetes in Google Cloud Platform or GKE (don’t set up the
+solution on real infrastructure by the way!!!). You can use diagrams to help illustrate your
+explanation. Feel free to add assumptions.
+
 ## Infrastructure Diagram
 <p align="center">
   <img src="img/infrastructure-diagram.png" alt="Infrastructure Diagram Images">
