@@ -264,7 +264,7 @@ Based what have been designed on the diagram.
 All our infrastructure will be deployed using Terraform. To aligh with GitOps princle, We will leverage Atlantis as Terraform CI/CD. As we use Weave Flux for Application deployment, git will be the source of truth.
 
 Atlantis will detect any changes for adding new resources.
-Here is the sample configuration for atlantis.yaml
+Here is the sample configuration for atlantis.yaml. Atlantis will detect changes on directory that is listed her in every Pull Request.
 ```yaml
 version: 3
 projects:
@@ -310,7 +310,7 @@ projects:
       enabled: true
 ```
 All cloud and service deployment will invoke from terraform module that we create in module directory.
-If we want to add new cloud deployment Amazon EKS for example  we just need to add
+It is an example for adding CLoud deployment Amazon Elastic Kubernetes Service.
 
 ```yaml
 - dir: cloud-deployment/eks
@@ -327,6 +327,7 @@ If we want to add new service, we can add this line below:
       when_modified: ["*.tf*"]
       enabled: true
 ```
+
 Service deployment will automatically provision the service Docker Registry ECR, CI/CD Codepipeline, Codebuild, etc.
 If developer want to add new services for example. Developer will need to clone the terraform code. Add new atlantis config in atlantis.yaml. Furthermore, they will need to make PR request with Jira ticket as their branch name e.g OPS-001.
 Atlantis will automatically will print the terraform plan for our new infra and services.
@@ -334,7 +335,7 @@ DevOps team then will review the changes on their Pull Request. After DevOps tea
 Unlike Weave Flux, Atlantis can revert the actual state to desired state based on Github if we perform infrastructure changes outside atlantis.
 
 # Network
-Here's our infrastructure diagram designed for our AWS network.
+Here's our infrastructure terraform  for our AWS network.
 Our VPC CIDR will use: **10.0.0.0/16**
 The subnet CIDR will be derived using Terraform function
 ```terraform
@@ -345,6 +346,7 @@ We also have configured the routing to NAT and Internet Gateway.
 - Our kubernetes node worker be placed in node subnet
 - Our kubernetes app (pod) will be placed in app subnet
 - Last but not least, our Amazon Aurora MySQL, Elasticache Redis, and Our MSK Kafka will be placed in data subnet accordingly.
+- Our subnet will span for two Availability Zones to provide High Availability and Fault Tolerance.
 
 # Network Terraform Modular codes
 It contains the terraform code for module and cloud deployment
@@ -699,138 +701,94 @@ output "igw_arn" {
 ```
 
 ## Cloud Deployment: Network
-This is deployment
+The module code above then will be invoked in Cloud Deployment - Network
 
-# Elastic Kubernetes Service
-
+**cloud_deployment/main.tf**
 ```terraform
-resource "aws_iam_role" "eks_role" {
-  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}-role"
-
-  assume_role_policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "eks.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-POLICY
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cluster_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.eks_role.name
-}
-
-# Optionally, enable Security Groups for Pods
-# Reference: https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html
-resource "aws_iam_role_policy_attachment" "eks_pods_sg_attachment" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
-  role       = aws_iam_role.eks_role.name
-}
-
-resource "aws_eks_cluster" "cluster" {
-  name     = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}"
-  role_arn = aws_iam_role.eks_role.arn
-
-  vpc_config {
-    subnet_ids = aws_subnet.node.*.id
+terraform {
+  backend "s3" {
+    bucket  = "99c-prd-storage-s3-terraform"
+    region  = "ap-southeast-1"
+    key     = "99c-network-prd.tfstate"
+    profile = "99c-prd"
   }
-
-  # Ensure that IAM Role permissions are created before and deleted after EKS Cluster handling.
-  # Otherwise, EKS will not be able to properly delete EKS managed EC2 infrastructure such as Security Groups.
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_attachment,
-    aws_iam_role_policy_attachment.eks_pods_sg_attachment,
-  ]
 }
 
-resource "aws_iam_role" "node_role" {
-  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}-role"
-
-  assume_role_policy = jsonencode({
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-    Version = "2012-10-17"
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "eks_node_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.node_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.node_role.name
-}
-
-resource "aws_iam_role_policy_attachment" "eks_ecr_policy_readonly" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.node_role.name
-}
-
-resource "aws_eks_node_group" "ondemand" {
-  cluster_name    = aws_eks_cluster.cluster.name
-  node_group_name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}"
-  node_role_arn   = aws_iam_role.node_role.arn
-  subnet_ids      = aws_subnet.node.*.id
-
-  scaling_config {
-    desired_size = 3
-    max_size     = 6
-    min_size     = 3
-  }
-
-  update_config {
-    max_unavailable = 2
-  }
-
-  # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.
-  # Otherwise, EKS will not be able to properly delete EC2 Instances and Elastic Network Interfaces.
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_ecr_policy_readonly,
-  ]
-}
-
-resource "aws_eks_node_group" "spot" {
-  cluster_name    = aws_eks_cluster.cluster.name
-  node_group_name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}"
-  node_role_arn   = aws_iam_role.node_role.arn
-  subnet_ids      = aws_subnet.node.*.id
-
-  scaling_config {
-    desired_size = 3
-    max_size     = 6
-    min_size     = 3
-  }
-
-  update_config {
-    max_unavailable = 2
-  }
-
-  # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.
-  # Otherwise, EKS will not be able to properly delete EC2 Instances and Elastic Network Interfaces.
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_ecr_policy_readonly,
-  ]
+module "vpc" {
+  source               = "../../modules/network"
+  region               = "ap-southeast-1"
+  unit                 = "99c"
+  env                  = "prd"
+  code                 = "network"
+  feature              = "vpc"
+  sub                  = ["main", "subnet", "nat-gw", "igw", "rt"]
+  creator              = "tf"
+  vpc_cidr             = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
 }
 ```
+
+**cloud_deployment_vpc/outputs.tf**
+
+```
+#VPC
+output "network_vpc_id" {
+  value = module.vpc.vpc_id
+}
+
+output "network_vpc_arn" {
+  value = module.vpc.vpc_arn
+}
+
+output "network_vpc_cidr_block" {
+  value = module.vpc.vpc_cidr_block
+}
+
+#Subnet
+output "network_public_subnet_id" {
+  value = module.vpc.public_subnet_id
+}
+
+output "network_public_subnet_arn" {
+  value = module.vpc.public_subnet_arn
+}
+
+output "network_app_subnet_id" {
+  value = module.vpc.app_subnet_id
+}
+
+output "network_app_subnet_arn" {
+  value = module.vpc.app_subnet_arn
+}
+
+output "network_cache_subnet_id" {
+  value = module.vpc.cache_subnet_id
+}
+
+output "network_cache_subnet_arn" {
+  value = module.vpc.cache_subnet_arn
+}
+
+output "network_db_subnet_id" {
+  value = module.vpc.db_subnet_id
+}
+
+output "network_db_subnet_arn" {
+  value = module.vpc.db_subnet_arn
+}
+
+#Internet Gateway
+output "network_igw_subnet_id" {
+  value = module.vpc.igw_id
+}
+
+output "network_igw_subnet_arn" {
+  value = module.vpc.igw_arn
+}
+```
+
+
 
 # Amazon RDS: MySQL
 Our Aurora MySQL is 5x times performance compared to general MySQL engine. It also has been designed elastically, so it can scale elastically should the business perform. We have implement AWS App Autoscaling for Aurora RDS Read Replica.
@@ -1122,7 +1080,11 @@ EXPOSE 8080
 ENTRYPOINT ["/go/bin/service_e"]
 ```
 
-Codebuild Buildspecs file for CI
+# Buildspec for our CI in Codebuild
+Our repositories contain 4 services. So, Our CI need to detect which service directory that has changed. Our strategy to handle this is
+- Check the different between Head and working directory in current commit
+- if the file is changed in service_e, then our Codepipeline will build, tag, and push our docker image service to ECR.
+
 ```yaml
 version: 0.2
 phases:
@@ -1194,7 +1156,7 @@ phases:
         fi
 ```
 # Helm Chart
-
+Our kubernetes will use Helm chart. Flux controller will use the chart as our desired state in Github, and deploy them to the actual state in our kubernetes cluster (EKS)
 **Deployment**
 Our deployment automatically has been set to get Env from our Configmap and Secret.
 Here's sample deployment for our Service E:
@@ -1264,7 +1226,7 @@ spec:
 
 **Ingress**
 
-This our ingress template. One of our backend service not using API gateway, we can assign them to Nginx Ingress class, not Kong Ingress class.
+This our ingress template. Our ingress will use Kong Ingress controller for backend service that is used API gateway. Backend service that is not using API gateway will be assigned to Nginx Ingress class.
 ```yaml
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := .Release.Name -}}
