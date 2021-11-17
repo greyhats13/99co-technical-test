@@ -354,81 +354,6 @@ It contains the terraform code for module and cloud deployment
 All the code on network modules. This module will be invoke for cloud network deployment
 **modules/network/variables.tf**
 ```terraform
-#Naming Standard
-variable "region" {
-  type        = string
-  description = "AWS region"
-}
-
-variable "unit" {
-  type        = string
-  description = "business unit code"
-}
-
-variable "env" {
-  type        = string
-  description = "stage environment where the infrastructure will be deployed"
-}
-
-variable "code" {
-  type        = string
-  description = "service domain code to use"
-}
-
-variable "feature" {
-  type        = list(string)
-  description = "the name of AWS services feature"
-}
-
-variable "creator" {
-  type        = string
-  default     = "tf"
-  description = "The creator name of the resource"
-}
-
-#VPC Arguments
-variable "vpc_cidr" {
-  type        = string
-  description = "Network VPC CIDR"
-}
-
-variable "enable_dns_support" {
-  type        = bool
-  description = "Enable DNS SUpport"
-}
-
-variable "enable_dns_hostnames" {
-  type        = bool
-  description = "Enable DNS Hostnames"
-}
-
-#Subnets Arguments
-variable "public_subnet_cidr" {
-  type        = list(string)
-  description = "public subnet"
-}
-
-variable "app_subnet_cidr" {
-  type        = list(string)
-  description = "application subnet"
-}
-
-variable "cache_subnet_cidr" {
-  type        = list(string)
-  description = "Cache subnet"
-}
-
-variable "db_subnet_cidr" {
-  type        = list(string)
-  description = "Database subnet"
-}
-
-#Elastic IP Arguments
-variable "total_eip" {
-  type = number
-  description = "Total elastic IP"
-}
-```
 
 **modules/network/vpc.tf**
 ```terraform
@@ -642,78 +567,9 @@ resource "aws_route_table_association" "data_rta" {
 }
 ```
 
-**modules/network/outputs.tf**
-```terraform
-#VPC
-output "vpc_id" {
-    value = aws_vpc.vpc.id
-}
-
-output "vpc_arn" {
-    value = aws_vpc.vpc.arn
-}
-
-output "vpc_cidr_block" {
-    value = aws_vpc.vpc.cidr_block
-}
-
-#Subnet
-output "public_subnet_id" {
-    value = aws_subnet.public_subnet.*.id
-}
-
-output "public_subnet_arn" {
-    value = aws_subnet.public_subnet.*.arn
-}
-
-output "app_subnet_id" {
-    value = aws_subnet.app_subnet.*.id
-}
-
-output "app_subnet_arn" {
-    value = aws_subnet.app_subnet.*.arn
-}
-
-output "cache_subnet_id" {
-    value = aws_subnet.cache_subnet.*.id
-}
-
-output "cache_subnet_arn" {
-    value = aws_subnet.cache_subnet.*.arn
-}
-
-output "db_subnet_id" {
-    value = aws_subnet.db_subnet.*.id
-}
-
-output "db_subnet_arn" {
-    value = aws_subnet.db_subnet.*.arn
-}
-
-#Internet Gateway
-output "igw_id" {
-    value = aws_internet_gateway.igw.id
-}
-
-output "igw_arn" {
-    value = aws_internet_gateway.igw.arn
-}
-```
-
-## Cloud Deployment: Network
+## Cloud Deployment: Network. 
 The module code above then will be invoked in Cloud Deployment - Network
-
-**cloud_deployment/main.tf**
 ```terraform
-terraform {
-  backend "s3" {
-    bucket  = "99c-prd-storage-s3-terraform"
-    region  = "ap-southeast-1"
-    key     = "99c-network-prd.tfstate"
-    profile = "99c-prd"
-  }
-}
-
 module "vpc" {
   source               = "../../modules/network"
   region               = "ap-southeast-1"
@@ -729,71 +585,277 @@ module "vpc" {
 }
 ```
 
-**cloud_deployment_vpc/outputs.tf**
+# EKS Terraform Modules codes
+It contains the terraform code for module and cloud deployment
+## EKS Module
+The terraform code is based on our infrastructure diagram. In this code, we have implemented Node autoscaling with minimum 4 nodes and maximumm 256 nodes. It will scale should the business perform when running massive ads. Our EKS infrastructure will guarantee SLA 99.9% from our infrastructure deisgn.
 
-```
-#VPC
-output "network_vpc_id" {
-  value = module.vpc.vpc_id
+**modules/compute/eks/eks.tf**
+```terraform
+resource "aws_iam_role" "eks_role" {
+  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}-role"
+
+  assume_role_policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "eks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+POLICY
 }
 
-output "network_vpc_arn" {
-  value = module.vpc.vpc_arn
+resource "aws_iam_role_policy_attachment" "eks_cluster_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+  role       = aws_iam_role.eks_role.name
 }
 
-output "network_vpc_cidr_block" {
-  value = module.vpc.vpc_cidr_block
+# Optionally, enable Security Groups for Pods
+# Reference: https://docs.aws.amazon.com/eks/latest/userguide/security-groups-for-pods.html
+resource "aws_iam_role_policy_attachment" "eks_pods_sg_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+  role       = aws_iam_role.eks_role.name
 }
 
-#Subnet
-output "network_public_subnet_id" {
-  value = module.vpc.public_subnet_id
-}
+resource "aws_eks_cluster" "cluster" {
+  name     = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}"
+  role_arn = aws_iam_role.eks_role.arn
 
-output "network_public_subnet_arn" {
-  value = module.vpc.public_subnet_arn
-}
+  vpc_config {
+    subnet_ids = data.terraform_remote_state.network.outputs.network_app_subnet_id
+  }
 
-output "network_app_subnet_id" {
-  value = module.vpc.app_subnet_id
-}
-
-output "network_app_subnet_arn" {
-  value = module.vpc.app_subnet_arn
-}
-
-output "network_cache_subnet_id" {
-  value = module.vpc.cache_subnet_id
-}
-
-output "network_cache_subnet_arn" {
-  value = module.vpc.cache_subnet_arn
-}
-
-output "network_db_subnet_id" {
-  value = module.vpc.db_subnet_id
-}
-
-output "network_db_subnet_arn" {
-  value = module.vpc.db_subnet_arn
-}
-
-#Internet Gateway
-output "network_igw_subnet_id" {
-  value = module.vpc.igw_id
-}
-
-output "network_igw_subnet_arn" {
-  value = module.vpc.igw_arn
+  # Ensure that IAM Role permissions are created before and deleted after EKS Cluster handling.
+  # Otherwise, EKS will not be able to properly delete EKS managed EC2 infrastructure such as Security Groups.
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_attachment,
+    aws_iam_role_policy_attachment.eks_pods_sg_attachment,
+  ]
 }
 ```
 
+**modules/compute/eks/node-groups.tf**
+Our node group is for on-demand. We can also setup new nodegroup using Spot for Cost optimization.
+```terraform
+resource "aws_iam_role" "node_role" {
+  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}-role"
 
+  assume_role_policy = jsonencode({
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+    Version = "2012-10-17"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_node_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+  role       = aws_iam_role.node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+  role       = aws_iam_role.node_role.name
+}
+
+resource "aws_iam_role_policy_attachment" "eks_ecr_policy_readonly" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.node_role.name
+}
+
+resource "aws_eks_node_group" "ondemand" {
+  cluster_name    = aws_eks_cluster.cluster.name
+  node_group_name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}"
+  node_role_arn   = aws_iam_role.node_role.arn
+  subnet_ids      = data.terraform_remote_state.network.outputs.network_app_subnet_id
+  scaling_config {
+    desired_size = 4
+    max_size     = 32
+    min_size     = 4
+  }
+
+  update_config {
+    max_unavailable = 2
+  }
+
+  # Ensure that IAM Role permissions are created before and deleted after EKS Node Group handling.
+  # Otherwise, EKS will not be able to properly delete EC2 Instances and Elastic Network Interfaces.
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_ecr_policy_readonly,
+  ]
+}
+```
+
+**cloud_deployment/eks/main.tf**
+Here's the implementation using module EKS.
+```terraform
+module "eks" {
+  source                           = "../../modules/compute/ecs"
+  region                           = "ap-southeast-1"
+  unit                             = "99c"
+  env                              = "prd"
+  code                             = "compute"
+  feature                          = ["eks"]
+}
+```
+
+# Toolchain Deployment
+After kubernetes cluster is provisioned. It will automatically all the toolchain such as Flux, Kong, Nginx, etc
+
+# Flux Installation in Kubernetes
+
+**modules/flux/fluxs.tf
+```terraform
+provider "kubernetes" {
+  host  = data.terraform_remote_state.k8s.outputs.do_k8s_endpoint
+  token = data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.token
+  cluster_ca_certificate = base64decode(
+    data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.cluster_ca_certificate
+  )
+}
+
+provider "kubectl" {}
+
+data "flux_install" "main" {
+  target_path = var.target_path
+}
+
+data "flux_sync" "main" {
+  target_path = var.target_path
+  url         = var.github_url
+  branch      = var.branch
+}
+
+# Kubernetes
+resource "kubernetes_namespace" "flux_system" {
+  metadata {
+    name = "flux-system"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].labels,
+    ]
+  }
+}
+
+data "kubectl_file_documents" "install" {
+  content = data.flux_install.main.content
+}
+
+data "kubectl_file_documents" "sync" {
+  content = data.flux_sync.main.content
+}
+
+locals {
+  install = [for v in data.kubectl_file_documents.install.documents : {
+    data : yamldecode(v)
+    content : v
+    }
+  ]
+  sync = [for v in data.kubectl_file_documents.sync.documents : {
+    data : yamldecode(v)
+    content : v
+    }
+  ]
+}
+
+resource "kubectl_manifest" "install" {
+  for_each   = { for v in local.install : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
+  depends_on = [kubernetes_namespace.flux_system]
+  yaml_body  = each.value
+}
+
+resource "kubectl_manifest" "sync" {
+  for_each   = { for v in local.sync : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
+  depends_on = [kubernetes_namespace.flux_system]
+  yaml_body  = each.value
+}
+
+resource "kubernetes_secret" "main" {
+  depends_on = [kubectl_manifest.install]
+
+  metadata {
+    name      = data.flux_sync.main.secret
+    namespace = data.flux_sync.main.namespace
+  }
+
+  data = {
+    identity       = tls_private_key.main.private_key_pem
+    "identity.pub" = tls_private_key.main.public_key_pem
+    known_hosts    = local.known_hosts
+  }
+}
+
+# GitHub
+resource "github_repository" "main" {
+  name       = "helm-repository"
+  visibility = "public"
+  auto_init  = true
+}
+
+resource "github_branch_default" "main" {
+  repository = github_repository.main.name
+  branch     = "main"
+}
+
+resource "github_repository_deploy_key" "main" {
+  title      = "production-cluster"
+  repository = github_repository.main.name
+  key        = tls_private_key.main.public_key_openssh
+  read_only  = true
+}
+
+resource "github_repository_file" "install" {
+  repository = github_repository.main.name
+  file       = data.flux_install.main.path
+  content    = data.flux_install.main.content
+  branch     = "main"
+}
+
+resource "github_repository_file" "sync" {
+  repository = github_repository.main.name
+  file       = data.flux_sync.main.path
+  content    = data.flux_sync.main.content
+  branch     = "main"
+}
+```
+
+**toolchain-deployment/flux/main.tf**
+```terraform
+terraform {
+  backend "s3" {
+    bucket  = "99c-prd-storage-s3-terraform"
+    region  = "ap-southeast-1"
+    key     = "99c-compute-flux-prd.tfstate"
+    profile = "99c-prd"
+  }
+}
+
+module "flux" {
+  source    = "../../modules/flux"
+  namespace = "flux-system"
+  github_url = "ssh://git@github.com/99c/99c-toolchain-flux.git"
+}
+```
 
 # Amazon RDS: MySQL
 Our Aurora MySQL is 5x times performance compared to general MySQL engine. It also has been designed elastically, so it can scale elastically should the business perform. We have implement AWS App Autoscaling for Aurora RDS Read Replica.
 Our database production also have been secured in transit using SQL so the application is enforced to use SSL connection and at rest using KMS to encrpyt the storages. Our database can only be accessed from internal VPC network.
 
+**modules/compute/rds/aurora.tf**
 ```terraform
 resource "aws_security_group" "sg" {
   name        = "${var.unit}-${var.env}-${var.code}-${var.feature}-sg"
