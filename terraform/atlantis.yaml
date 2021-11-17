@@ -1,0 +1,22 @@
+version: 3
+projects:
+  - dir: service-deployment/99c-service-e
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-f
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-g
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-h
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true

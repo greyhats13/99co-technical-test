@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "action": {
+        "type": "expire"
+      },
+      "selection": {
+        "countType": "imageCountMoreThan",
+        "countNumber": 10,
+        "tagStatus": "any"
+      },
+      "description": "Remove image more than 10",
+      "rulePriority": 1
+    }
+  ]
+}

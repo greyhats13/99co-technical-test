@@ -1,0 +1,183 @@
+{
+    "Id": "key-consolepolicy-3",
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Enable IAM User Permissions",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::xxxxxxxxxxxx:root"
+            },
+            "Action": "kms:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow access for Key Administrators",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-mirza-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsAutoscaleRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsInstanceRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsTaskExecutionRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/LambdaExtremeAccess",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/OrganizationAccountAccessRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticache.amazonaws.com/AWSServiceRoleForElastiCache",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/globalaccelerator.amazonaws.com/AWSServiceRoleForGlobalAccelerator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/replicator.lambda.amazonaws.com/AWSServiceRoleForLambdaReplicator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/organizations.amazonaws.com/AWSServiceRoleForOrganizations",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/support.amazonaws.com/AWSServiceRoleForSupport",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/trustedadvisor.amazonaws.com/AWSServiceRoleForTrustedAdvisor",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-marketplace-api-build-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/mohi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/raffi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/rizqi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/widada",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/9y3u08-f45qbps",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/AWSCodePipelineServiceRole-ap-southeast-1-marketplace-api-pipel",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/logger.cloudfront.amazonaws.com/AWSServiceRoleForCloudFrontLogger",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ade",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanaServerlessAccount",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanatest",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/daleen",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/didik",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/hendro",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ibonk",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/kemal",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/luqmanul",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/maks"
+                ]
+            },
+            "Action": [
+                "kms:Create*",
+                "kms:Describe*",
+                "kms:Enable*",
+                "kms:List*",
+                "kms:Put*",
+                "kms:Update*",
+                "kms:Revoke*",
+                "kms:Disable*",
+                "kms:Get*",
+                "kms:Delete*",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "kms:ScheduleKeyDeletion",
+                "kms:CancelKeyDeletion"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow use of the key",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-mirza-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsAutoscaleRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsInstanceRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsTaskExecutionRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/LambdaExtremeAccess",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/OrganizationAccountAccessRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticache.amazonaws.com/AWSServiceRoleForElastiCache",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/globalaccelerator.amazonaws.com/AWSServiceRoleForGlobalAccelerator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/replicator.lambda.amazonaws.com/AWSServiceRoleForLambdaReplicator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/organizations.amazonaws.com/AWSServiceRoleForOrganizations",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/support.amazonaws.com/AWSServiceRoleForSupport",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/trustedadvisor.amazonaws.com/AWSServiceRoleForTrustedAdvisor",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-marketplace-api-build-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/mohi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/raffi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/rizqi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/widada",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/9y3u08-f45qbps",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/AWSCodePipelineServiceRole-ap-southeast-1-marketplace-api-pipel",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/logger.cloudfront.amazonaws.com/AWSServiceRoleForCloudFrontLogger",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ade",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanaServerlessAccount",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanatest",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/daleen",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/didik",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/hendro",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ibonk",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/kemal",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/luqmanul",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/maks"
+                ]
+            },
+            "Action": [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow attachment of persistent resources",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-mirza-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsAutoscaleRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsInstanceRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/ecsTaskExecutionRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/LambdaExtremeAccess",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/OrganizationAccountAccessRole",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticache.amazonaws.com/AWSServiceRoleForElastiCache",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/globalaccelerator.amazonaws.com/AWSServiceRoleForGlobalAccelerator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/replicator.lambda.amazonaws.com/AWSServiceRoleForLambdaReplicator",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/organizations.amazonaws.com/AWSServiceRoleForOrganizations",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/support.amazonaws.com/AWSServiceRoleForSupport",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/trustedadvisor.amazonaws.com/AWSServiceRoleForTrustedAdvisor",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/codebuild-marketplace-api-build-service-role",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/mohi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/raffi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/rizqi",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/widada",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/9y3u08-f45qbps",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/service-role/AWSCodePipelineServiceRole-ap-southeast-1-marketplace-api-pipel",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ops.apigateway.amazonaws.com/AWSServiceRoleForAPIGateway",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+                    "arn:aws:iam::xxxxxxxxxxxx:role/aws-service-role/logger.cloudfront.amazonaws.com/AWSServiceRoleForCloudFrontLogger",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ade",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanaServerlessAccount",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/avanatest",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/daleen",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/didik",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/hendro",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/ibonk",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/kemal",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/luqmanul",
+                    "arn:aws:iam::xxxxxxxxxxxx:user/maks"
+                ]
+            },
+            "Action": [
+                "kms:CreateGrant",
+                "kms:ListGrants",
+                "kms:RevokeGrant"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "Bool": {
+                    "kms:GrantIsForAWSResource": "true"
+                }
+            }
+        }
+    ]
+}

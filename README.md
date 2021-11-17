@@ -1,4 +1,4 @@
-# 99co-technical-test
+# 99c-technical-test
 99.co DevOps Technical Test
 
 # Part A
@@ -249,9 +249,9 @@ Based what have been designed on the diagram.
 - All our infrastructure is designed elastically. The infrastructure will scale seamlessly should the bussiness perform such as massive ads that bring high traffics from million users.
 - The infrastructure is designed for Disaster Recovery Plan with Multi Site Strategy. Thus, Region-wide failure will keep our application up. Our Route53 Healthcheck will make sure our application uptime reach 99.999%.
 - The Infrastructure adopt naming standardization for all our cloud resources using
-  - var.unit = It represent the business unit code e.g 99c
-  - var.code = it represent the service domain code e.g api, mar,etc
-  - var.feature = it represent the service domain feature e.g book, payment, etc
+  - var.unit = It represent the business unit code e.g 99c (99.co)
+  - var.code = it represent the service domain code e.g service
+  - var.feature = it represent the service domain feature e.g e, f, g, h, etc
   - var.env = it represent the our staging environment.
 - We have secured all of our infrastructure to encrypt data in transit using SSL/TLS, and at rest using AWS KMS to encrypt our storages such as block(EBS) and object storages (S3)
 - Kubernetes microservice is also implemented Horizontal Pod Autoscaler with minimum 2 and maximum 256 pod and will distributed in two AZs.
@@ -273,20 +273,102 @@ We also have configured the routing to NAT and Internet Gateway.
 - Our kubernetes app (pod) will be placed in app subnet
 - Last but not least, our Amazon Aurora MySQL, Elasticache Redis, and Our MSK Kafka will be placed in data subnet accordingly.
 
+# Network Terraform Modular codes
+**modules/network/variables.tf**
 ```terraform
-resource "aws_vpc" "vpc" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_support   = true
-  enable_dns_hostnames = true
-  tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}-main"
-    "Env"     = var.env
-    "Code"    = var.code
-    "Feature" = var.feature
-    "Sub"     = "${var.sub[0]-main}"
-  }
+#Naming Standard
+variable "region" {
+  type        = string
+  description = "AWS region"
 }
 
+variable "unit" {
+  type        = string
+  description = "business unit code"
+}
+
+variable "env" {
+  type        = string
+  description = "stage environment where the infrastructure will be deployed"
+}
+
+variable "code" {
+  type        = string
+  description = "service domain code to use"
+}
+
+variable "feature" {
+  type        = list(string)
+  description = "the name of AWS services feature"
+}
+
+variable "creator" {
+  type        = string
+  default     = "tf"
+  description = "The creator name of the resource"
+}
+
+#VPC Arguments
+variable "vpc_cidr" {
+  type        = string
+  description = "Network VPC CIDR"
+}
+
+variable "enable_dns_support" {
+  type        = bool
+  description = "Enable DNS SUpport"
+}
+
+variable "enable_dns_hostnames" {
+  type        = bool
+  description = "Enable DNS Hostnames"
+}
+
+#Subnets Arguments
+variable "public_subnet_cidr" {
+  type        = list(string)
+  description = "public subnet"
+}
+
+variable "app_subnet_cidr" {
+  type        = list(string)
+  description = "application subnet"
+}
+
+variable "cache_subnet_cidr" {
+  type        = list(string)
+  description = "Cache subnet"
+}
+
+variable "db_subnet_cidr" {
+  type        = list(string)
+  description = "Database subnet"
+}
+
+#Elastic IP Arguments
+variable "total_eip" {
+  type = number
+  description = "Total elastic IP"
+}
+```
+
+**modules/network/vpc.tf**
+```terraform
+resource "aws_vpc" "vpc" {
+  cidr_block = var.vpc_cidr
+  enable_dns_support = var.enable_dns_support
+  enable_dns_hostnames = var.enable_dns_hostnames
+  tags = {
+    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature[0]}"
+    "Env"     = var.env
+    "Code"    = var.code
+    "Feature" = var.feature[0]
+    "Creator" = var.creator
+  }
+}
+```
+**modules/network/subnet.tf**
+```terraform
 data "aws_availability_zones" "az" {
   state = "available"
 }
@@ -351,47 +433,56 @@ resource "aws_subnet" "data" {
     "Zones"   = element(data.aws_availability_zones.az.names, count.index)
   }
 }
+```
 
+**modules/network/igw.tf**
+```terraform
 resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.vpc.id
+  vpc_id   = aws_vpc.vpc.id
 
   tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[3]}"
+    "Name" = "${var.unit}-${var.env}-${var.code}-${var.feature[2]}"
     "Env"     = var.env
     "Code"    = var.code
-    "Feature" = var.feature
-    "Sub"     = var.sub[3]
+    "Feature" = var.feature[2]
+    "Creator" = var.creator
   }
 }
+```
 
+**modules/network/nat.tf**
+```terraform
 resource "aws_eip" "eip" {
-  count = 2
+  count = var.total_eip
   vpc   = true
 
   tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[2]}-${count.index}"
+    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature[3]}-${count.index}"
     "Env"     = var.env
     "Code"    = var.code
-    "Feature" = var.feature
-    "Sub"     = var.sub[2]
+    "Feature" = var.feature[3]
+    "Creator" = var.creator
   }
 }
 
 resource "aws_nat_gateway" "nat" {
-  count         = 2
+  count         = length(aws_subnet.public_subnet)
   allocation_id = element(aws_eip.eip.*.id, count.index)
   subnet_id     = element(aws_subnet.public_subnet.*.id, count.index)
 
   tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[2]}-${element(data.aws_availability_zones.az.names, count.index)}"
+    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature[4]}-${element(data.aws_availability_zones.az.names, count.index)}"
     "Env"     = var.env
     "Code"    = var.code
-    "Feature" = var.feature
-    "Sub"     = var.sub[2]
+    "Feature" = var.feature[4]
+    "Creator" = var.creator
     "Zones"   = element(data.aws_availability_zones.az.names, count.index)
   }
 }
+```
 
+**modules/network/route.tf**
+```terraform
 #Public Route Table
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.vpc.id
@@ -406,6 +497,7 @@ resource "aws_route_table" "public_rt" {
     "Env"     = var.env
     "Code"    = var.code
     "Feature" = var.feature[5]
+    "Creator" = var.creator
   }
 }
 
@@ -430,16 +522,23 @@ resource "aws_route_table" "app_rt" {
     "Env"     = var.env
     "Code"    = var.code
     "Feature" = var.feature[5]
+    "Creator" = var.creator
   }
 }
 
-resource "aws_route_table_association" "app_rt" {
+resource "aws_route_table_association" "app_rta" {
   count          = length(aws_subnet.app_subnet)
   subnet_id      = element(aws_subnet.app_subnet.*.id, count.index)
   route_table_id = element(aws_route_table.app_rt.*.id, count.index)
 }
 
-#Data Route Table
+resource "aws_route_table_association" "cache_rta" {
+  count          = length(aws_subnet.cache_subnet)
+  subnet_id      = element(aws_subnet.cache_subnet.*.id, count.index)
+  route_table_id = element(aws_route_table.cache_rt.*.id, count.index)
+}
+
+#Database Route Table
 resource "aws_route_table" "data_rt" {
   count    = length(aws_subnet.db_subnet)
   vpc_id = aws_vpc.vpc.id
@@ -450,7 +549,7 @@ resource "aws_route_table" "data_rt" {
   }
 
   tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature[5]}-db"
+    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature[5]}-data"
     "Env"     = var.env
     "Code"    = var.code
     "Feature" = var.feature[5]
@@ -458,10 +557,68 @@ resource "aws_route_table" "data_rt" {
   }
 }
 
-resource "aws_route_table_association" "db_rta" {
+resource "aws_route_table_association" "data_rta" {
   count          = length(aws_subnet.db_subnet)
   subnet_id      = element(aws_subnet.db_subnet.*.id, count.index)
   route_table_id = element(aws_route_table.db_rt.*.id, count.index)
+}
+```
+
+**modules/network/outputs.tf**
+```terraform
+#VPC
+output "vpc_id" {
+    value = aws_vpc.vpc.id
+}
+
+output "vpc_arn" {
+    value = aws_vpc.vpc.arn
+}
+
+output "vpc_cidr_block" {
+    value = aws_vpc.vpc.cidr_block
+}
+
+#Subnet
+output "public_subnet_id" {
+    value = aws_subnet.public_subnet.*.id
+}
+
+output "public_subnet_arn" {
+    value = aws_subnet.public_subnet.*.arn
+}
+
+output "app_subnet_id" {
+    value = aws_subnet.app_subnet.*.id
+}
+
+output "app_subnet_arn" {
+    value = aws_subnet.app_subnet.*.arn
+}
+
+output "cache_subnet_id" {
+    value = aws_subnet.cache_subnet.*.id
+}
+
+output "cache_subnet_arn" {
+    value = aws_subnet.cache_subnet.*.arn
+}
+
+output "db_subnet_id" {
+    value = aws_subnet.db_subnet.*.id
+}
+
+output "db_subnet_arn" {
+    value = aws_subnet.db_subnet.*.arn
+}
+
+#Internet Gateway
+output "igw_id" {
+    value = aws_internet_gateway.igw.id
+}
+
+output "igw_arn" {
+    value = aws_internet_gateway.igw.arn
 }
 ```
 
@@ -903,10 +1060,10 @@ phases:
       - printenv
       - echo Logging into AWS ECR...
       - $(aws ecr get-login --no-include-email --region ap-southeast-1)
-      - SERVICE_E_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd
-      - SERVICE_F_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-f-prd
-      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-g-prd
-      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-h-prd
+      - SERVICE_E_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-e-prd
+      - SERVICE_F_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-f-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-g-prd
+      - SERVICE_G_URI=xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-h-prd
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
   build_push:
@@ -969,12 +1126,12 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "99co-service-e.labels" . | nindent 4 }}
+    {{- include "99c-service-e.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "99co-service-e.selectorLabels" . | nindent 6 }}
+      {{- include "99c-service-e.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
@@ -982,7 +1139,7 @@ spec:
         {{ $key }}: {{ $value | quote }}
         {{- end }}
       labels:
-        {{- include "99co-service-e.selectorLabels" . | nindent 8 }}
+        {{- include "99c-service-e.selectorLabels" . | nindent 8 }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -1023,7 +1180,7 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "99co-service-e.selectorLabels" . | nindent 4 }}
+    {{- include "99c-service-e.selectorLabels" . | nindent 4 }}
 ```
 
 **Ingress**
@@ -1043,7 +1200,7 @@ metadata:
   name: {{ $fullName }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "99co-service-e.labels" . | nindent 4 }}
+    {{- include "99c-service-e.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -1135,7 +1292,7 @@ podAnnotations:
   prometheus.io/scrape: "false"
 
 image:
-  repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:latest
+  repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-e-prd:latest
   pullPolicy: Always
 
 nameOverride: ""
@@ -1143,8 +1300,8 @@ fullnameOverride: ""
 appConfig:
   APP_PORT: 8080
   DB_HOST: db.99.co:3306
-  DB_NAME: 99co
-  DB_USER: 99co-service-e
+  DB_NAME: 99c
+  DB_USER: 99c-service-e
   DB_PORT: 3306
   REDIS_HOST: cache.99.co:6379
 appSecret:
@@ -1168,7 +1325,7 @@ ingress:
     - host: e.service.api.99.co
       paths: []
   tls:
-    - secretName: 99co-service-e-ssl
+    - secretName: 99c-service-e-ssl
       hosts:
         - e.service.api.99.co
 
@@ -1229,7 +1386,7 @@ ingress:
     - host: e.service.api.99.co
       paths: []
   tls:
-    - secretName: 99co-service-e-ssl
+    - secretName: 99c-service-e-ssl
       hosts:
         - e.service.api.99.co
 ```
@@ -1294,7 +1451,7 @@ data "flux_install" "main" {
 
 data "flux_sync" "main" {
   target_path = var.target_path
-  url         = "ssh://git@github.com/99co/helm-repository.git"
+  url         = "ssh://git@github.com/99c/helm-repository.git"
   branch      = var.branch
 }
 
