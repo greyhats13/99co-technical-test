@@ -1330,7 +1330,7 @@ spec:
 ```
 
 **Configmap**
-
+```yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -1342,7 +1342,7 @@ data:
    {{- end }}
 
 **Secret**
-
+```yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -1353,8 +1353,10 @@ data:
   {{ $key }}: {{ $val | b64enc | quote }}
 {{- end }}
 type: Opaque
+```
 
 **Horizontal Pod Autoscaler**
+```yaml
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -1380,6 +1382,7 @@ spec:
       target:
         type: Utilization
         averageUtilization: {{ .Values.autoscaller.utilization.memory }}
+```
 
 **Values**
 
