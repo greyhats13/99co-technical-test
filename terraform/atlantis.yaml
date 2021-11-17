@@ -20,3 +20,23 @@ projects:
     autoplan:
       when_modified: ["*.tf*"]
       enabled: true
+  - dir: cloud-deployment/vpc
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/eks
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/elasticache
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/rds
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true

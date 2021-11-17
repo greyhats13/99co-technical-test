@@ -260,6 +260,79 @@ Based what have been designed on the diagram.
 - Our Continous Integration will leverage Github as SCM, AWS Codepipeline and AWS Codebuild for Continous delivery to produce docker images and push to ECR
 - We will implement the Gitops for our continous delivery (Pull Model) using Flux. Flux will read our helm manifest that is stored on Github as the single source of truth. Flux will deployed desired state from Git to the actual state (k8s). It can also detect drift that will restore our actual state to the desired sate on git.
 
+# Infrastructure Deployment
+All our infrastructure will be deployed using Terraform. To aligh with GitOps princle, We will leverage Atlantis as Terraform CI/CD. As we use Weave Flux for Application deployment, git will be the source of truth.
+
+Atlantis will detect any changes for adding new resources.
+Here is the sample configuration for atlantis.yaml
+```yaml
+version: 3
+projects:
+  - dir: service-deployment/99c-service-e
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-f
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-g
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: service-deployment/99c-service-h
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/vpc
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/eks
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/elasticache
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+  - dir: cloud-deployment/rds
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+```
+All cloud and service deployment will invoke from terraform module that we create in module directory.
+If we want to add new cloud deployment Amazon EKS for example  we just need to add
+
+```yaml
+- dir: cloud-deployment/eks
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+```
+If we want to add new service, we can add this line below:
+```yaml
+- dir: service-deployment/99c-service-e
+    apply_requirements: ["approved","mergeable"]
+    autoplan:
+      when_modified: ["*.tf*"]
+      enabled: true
+```
+Service deployment will automatically provision the service Docker Registry ECR, CI/CD Codepipeline, Codebuild, etc.
+If developer want to add new services for example. Developer will need to clone the terraform code. Add new atlantis config in atlantis.yaml. Furthermore, they will need to make PR request with Jira ticket as their branch name e.g OPS-001.
+Atlantis will automatically will print the terraform plan for our new infra and services.
+DevOps team then will review the changes on their Pull Request. After DevOps team approved the PR. Developer can then comment atlantis apply to apply the plan.
+Unlike Weave Flux, Atlantis can revert the actual state to desired state based on Github if we perform infrastructure changes outside atlantis.
+
 # Network
 Here's our infrastructure diagram designed for our AWS network.
 Our VPC CIDR will use: **10.0.0.0/16**
@@ -274,6 +347,9 @@ We also have configured the routing to NAT and Internet Gateway.
 - Last but not least, our Amazon Aurora MySQL, Elasticache Redis, and Our MSK Kafka will be placed in data subnet accordingly.
 
 # Network Terraform Modular codes
+It contains the terraform code for module and cloud deployment
+## Network Module
+All the code on network modules. This module will be invoke for cloud network deployment
 **modules/network/variables.tf**
 ```terraform
 #Naming Standard
@@ -621,6 +697,9 @@ output "igw_arn" {
     value = aws_internet_gateway.igw.arn
 }
 ```
+
+## Cloud Deployment: Network
+This is deployment
 
 # Elastic Kubernetes Service
 
