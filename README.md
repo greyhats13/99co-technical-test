@@ -218,20 +218,8 @@ solution on real infrastructure by the way!!!). You can use diagrams to help ill
 explanation. Feel free to add assumptions.
 
 **Answer:**
-# Technology Stack
-- AWS for public cloud
-- All our services will use docker container both backend and frontend.
-- Kubernetes for Container orchestration
-- Helm for kubernetes deployment
-- Our Docker registry will use Amazon ECR.
-- Github for SCM, and AWS Codepipeline with AWS Codebuild to build our containerized application, tag, and push them to Docke Registry
-- Weave Flux for CD that is aligned with GitOps principle
-- ElasticCloud for Observability such as realtime monitoring, analytics, APM, and logging.
 
-
-
-
-# Infrastructure Diagram
+# A. Infrastructure Diagram
 Here's diagram for the propposed solution
 <p align="center">
   <img src="img/infrastructure-diagram.svg" alt="Infrastructure Diagram Images">
@@ -245,6 +233,71 @@ Based what have been designed on the diagram.
 - Frontend service is using reactjs
 - FrontEnd Service J, K, L, M and Backend service N, P, Q, R is legacy service because not leveraging API gateway.
 - The infrastructure is deployed in AWS ap-southeast-1 region
+## a. The design of our infrastructure based on systemr requirment:
+Here's diagram for the propposed solution
+<p align="center">
+  <img src="img/infrastructure-diagram.svg" alt="Infrastructure Diagram Images">
+</p>
+
+# B. Technology Stack
+- AWS for public cloud
+- All our services will use docker container both backend and frontend.
+- Kubernetes for Container orchestration
+- Helm for kubernetes deployment
+- Our Docker registry will use Amazon ECR.
+- Github for SCM, and AWS Codepipeline with AWS Codebuild to build our containerized application, tag, and push them to Docke Registry
+- Weave Flux for CD that is aligned with GitOps principle
+- ElasticCloud for Observability such as realtime monitoring, analytics, APM, and logging.
+- Flagger and Istio for service mesh and canary deployment.
+
+## C. Setup deployment and namespace strategy
+- There would be 4 namespace in our kubernetes for services which is
+  1. backend (service e,f,g, h)
+  2. frontend (service a,b,c,d)
+  3. backend-legacy (service n,p,q,r)
+  4. frontend-legacy (service j,k,l,m)
+- There are 4 repositories and  contain 4 service in ea repository. Let's say the name of the repository is 99c-backend. We will set up deployment strategy for 99-backend for instance.
+  1. 99-backend/service-e
+  2. 99-backend/service-f
+  3. 99-backend/service-g
+  4. 99-backend/service-h
+99c-backend will have 4 directory. So, our pipeline code will be on the root folder. 
+- Our pipeline code in buildspec.yml (using AWS codebuild) will need to check which directory files that have changed in recent commit. We can use *git diff HEAD..<commit_hash>* to get the information. Piping  to filet the result with the associated service, and run the pipeline for that service:
+```yaml
+        if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_e/")" != "" ]; then
+          echo "Build, Tag, and Push Services F" &&
+          cd $CODEBUILD_SRC_DIR/services_e &&
+          cd $CODEBUILD_SRC_DIR/services_e/ &&
+          docker build -t $SERVICE_E_URI:latest -f Dockerfile . &&
+          docker tag $SERVICE_E_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
+          docker push $SERVICE_E_URI:latest &&
+          docker push $SERVICE_E_URI:$IMAGE_TAG &&
+          cd helm &&
+          helm lint helm/* &&
+          cd helm/ && 
+          helm package chart/ &&
+          helm repo index --url=https://99co.github.io/service-e/helm/ .
+        fi
+```
+
+Detail implementation can be seen in CI/CD section
+Our Continous Integation will need to have conditional to detect changes 
+
+## D. The strategy/approach that you are going to use to handle high usage but keep the system reaching uptime 99.9%.
+
+- Our infrastructure must be highly available, fault tolerant, redundat that is designed for failure.
+- All of our infrastructure must be elastic. It can scale automatically based on resources usage as the bussiness perform e.g running massive ads or event. The scaling must be placed in every layer such as Application workload, Horizontal Pod Autoscaling, Database Autoscaling,etc. So there will be no scenario our application is lack of resource.
+- For mission critical, our infrastructure mas have Disaster Recovery Plan. To achieve high Recovery Point Objective and Recovery Time Obective under five minutes, we will implement Multi Site Strategy where our infrastructure is replicated to another region with the same workload class and Perform Region DNS Healthcheck (Route53).
+- Our application must be able to self-healing due to any issues or error. We will deploy as container (docker) in kubernetes. Our docker images must align with DevOps Lean principle. We are using Alpine for our backend for Lean architecture. So, it can build, deploy, and heal faster for pod scheduling.
+- We will implement circuit breaker and advance deployment strategy such as canary that can shift traffic to new application gradually. Should the application encounter major bugs, it won't impact that much because we can rollback to previous version.
+- We will secure our infrastructure at every layer as possible. Good security will mantain good SLA form any malicious actor that can compromise our application.
+- Increase application performant database and cache, and also message broker(Kafka) to decoupling our services.
+
+# IMPLEMENTATION OF THE DESIGN
+
+Here is the part for implementation. Including code and fine-grained design. It won't cover all the details such as Disaster recovery Plan for code implementaiton,etc.
+
+## KEYPOINT
 - Application, Redis, MySQL Database, and Kafka workload are deployed in two availability zones ap-southeast-1a and ap-southeast-1b to provide high availability, and fault tolerance
 - All our infrastructure is designed elastically. The infrastructure will scale seamlessly should the bussiness perform such as massive ads that bring high traffics from million users.
 - The infrastructure is designed for Disaster Recovery Plan with Multi Site Strategy. Thus, Region-wide failure will keep our application up. Our Route53 Healthcheck will make sure our application uptime reach 99.999%.
@@ -253,7 +306,7 @@ Based what have been designed on the diagram.
   - var.code = it represent the service domain code e.g service
   - var.feature = it represent the service domain feature e.g e, f, g, h, etc
   - var.env = it represent the our staging environment.
-- We have secured all of our infrastructure to encrypt data in transit using SSL/TLS, and at rest using AWS KMS to encrypt our storages such as block(EBS) and object storages (S3)
+- Infrastructure is secured by encrypting data in transit using SSL/TLS, and at rest using AWS KMS to encrypt our storages such as block(EBS) and object storages (S3)
 - Kubernetes microservice is also implemented Horizontal Pod Autoscaler with minimum 2 and maximum 256 pod and will distributed in two AZs.
 - Our kubernetes also will deploy Kong as ingress controller. By doing that, we can leverage Kong API gateway and its plugin for authentication in API gateway, rate limited, Geo IP restriction, etc.
 - Our infrastructure and application will use ElasticCloud for observability. We will deploy filebeat as log aggregator and metricbeats as Daemon set. Filebeat will forward our log to Logstash. Logstash will parse our STDOUT using Grok Pattern to Elastic Document JSON to store in Elastic Search. So, we can query our them using Kibana to create Insightful Dashboard. We also will deployed APM Server to our EKS cluster.
@@ -262,7 +315,7 @@ Based what have been designed on the diagram.
 - We only cover sample code in Readme, you can explore more details code based on their directory accordingly
 
 
-# Infrastructure Deployment
+## Infrastructure Deployment
 All our infrastructure will be deployed using Terraform. To aligh with GitOps princle, We will leverage Atlantis as Terraform CI/CD. As we use Weave Flux for Application deployment, git will be the source of truth.
 
 Atlantis will detect any changes for adding new resources.
@@ -336,7 +389,7 @@ Atlantis will automatically will print the terraform plan for our new infra and 
 DevOps team then will review the changes on their Pull Request. After DevOps team approved the PR. Developer can then comment atlantis apply to apply the plan.
 Unlike Weave Flux, Atlantis can revert the actual state to desired state based on Github if we perform infrastructure changes outside atlantis.
 
-# Network
+## Network
 Here's our infrastructure terraform  for our AWS network.
 Our VPC CIDR will use: **10.0.0.0/16**
 The subnet CIDR will be derived using Terraform function
@@ -350,9 +403,9 @@ We also have configured the routing to NAT and Internet Gateway.
 - Last but not least, our Amazon Aurora MySQL, Elasticache Redis, and Our MSK Kafka will be placed in data subnet accordingly.
 - Our subnet will span for two Availability Zones to provide High Availability and Fault Tolerance.
 
-# Network Terraform Modular codes
+## Network Terraform Modular codes
 It contains the terraform code for module and cloud deployment
-## Network Module
+### Network Module
 All the code on network modules. This module will be invoke for cloud network deployment
 **modules/network/variables.tf**
 ```terraform
@@ -569,7 +622,7 @@ resource "aws_route_table_association" "data_rta" {
 }
 ```
 
-## Cloud Deployment: Network. 
+### Cloud Deployment: Network. 
 The module code above then will be invoked in Cloud Deployment - Network
 ```terraform
 module "vpc" {
@@ -587,9 +640,9 @@ module "vpc" {
 }
 ```
 
-# EKS Terraform Modules codes
+## EKS Terraform Modules codes
 It contains the terraform code for module and cloud deployment
-## EKS Module
+### EKS Module
 The terraform code is based on our infrastructure diagram. In this code, we have implemented Node autoscaling with minimum 4 nodes and maximumm 256 nodes. It will scale should the business perform when running massive ads. Our EKS infrastructure will guarantee SLA 99.9% from our infrastructure deisgn.
 
 **modules/compute/eks/eks.tf**
@@ -713,7 +766,7 @@ module "eks" {
 }
 ```
 
-# Amazon RDS: MySQL
+## Amazon RDS: MySQL
 Our Aurora MySQL is 5x times performance compared to general MySQL engine. It also has been designed elastically, so it can scale elastically should the business perform. We have implement AWS App Autoscaling for Aurora RDS Read Replica.
 Our database production also have been secured in transit using SQL so the application is enforced to use SSL connection and at rest using KMS to encrpyt the storages. Our database can only be accessed from internal VPC network.
 
@@ -856,7 +909,7 @@ module "rds" {
 }
 ```
 
-# Continous Integration (Codepipeline) and Continous Delivery (Flux) using GitOps
+## Continous Integration (Codepipeline) and Continous Delivery (Flux) using GitOps
 Our Continous Integration leverage AWS codepipeline with Codebuild and Github as the Source Control Management.
 
 Our Continous Delivery will adopt GitOps principle and Pull Model where Git would be the single source of truth. Our Continous Integration will use AWS Codepipeline and Codebuild to produce the artifact. Our CD will use Weave Flux. We will bootstrapping flux to our K8s cluster so Flux controller such as Source Controller and Helm controller will handle the deployment automatically. Flux will keep sync to our Github to examine the desired state, and automatically will deploy to the actual state  to our k8s cluster.
@@ -865,7 +918,7 @@ Here's our CI/CD diagram for the proposed solution
   <img src="img/ci-cd-diagram.png" alt="CI CD Diagram">
 </p>
 
-# Continous Integration
+## Continous Integration
 We have four repositories:
 
 1. frontend -> services A, B, C, D
@@ -1491,7 +1544,7 @@ Heres' the workfow four our Helm Release using FLux
   <img src="img/fluxcd-helm-operator-diagram.png" alt="Flux CD Diagram">
 </p>
 
-# Flux Configuration
+## Flux Configuration
 Our flux folder structure would look like this:
 <p align="center">
   <img src="img/flux-folder-structure.png" alt="Flux Folder structure">
@@ -1544,27 +1597,8 @@ spec:
       name: nginx-ingress-ingress-nginx-controller
       namespace: ingress-nginx
 ```
-## Flux Helm  Release:
-```yaml
-apiVersion: helm.fluxcd.io/v1
-kind: HelmRelease
-metadata:
-  name: 99co-service-e
-  namespace: 99c
-  annotations:
-    fluxcd.io/automated: "true"
-    filter.fluxcd.io/chart-image: glob:prd-*
-spec:
-  releaseName: 99co-service-e
-  chart:
-    git: git@github.com:99c/99c-service-e
-    path: helm/
-    ref: master
-  values:
-    image:
-      repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:<commit_hash>
-```
-# Sample Flux configuration for Service-e
+
+## Sample Flux configuration for Service-e
 
 **deployment/services/sources/kustomization.yaml**
 ```yaml
