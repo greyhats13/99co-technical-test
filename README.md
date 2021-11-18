@@ -198,7 +198,7 @@ This part helps us to understand how you would design and build a scalable syste
 serve millions of users per month.
 
 <p align="center">
-  <img src="img/part-c-diagram.svg" alt="part c diagram">
+  <img src="img/part-c-diagram.png" alt="part c diagram">
 </p>
 
 Let’s imagine we are going to build a Restful API system that can be accessed securely from the
