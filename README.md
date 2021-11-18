@@ -956,6 +956,11 @@ phases:
           docker tag $SERVICE_E_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
           docker push $SERVICE_E_URI:latest &&
           docker push $SERVICE_E_URI:$IMAGE_TAG &&
+          cd helm &&
+          helm lint helm/* &&
+          cd helm/ && 
+          helm package chart/ &&
+          helm repo index --url=https://99co.github.io/service-e/helm/ .
         fi
       - |
         if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_f/")" != "" ]; then
@@ -966,6 +971,11 @@ phases:
           docker tag $SERVICE_F_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
           docker push $SERVICE_F_URI:latest &&
           docker push $SERVICE_F_URI:$IMAGE_TAG &&
+          cd helm &&
+          helm lint helm/* &&
+          cd helm/ && 
+          helm package chart/ &&
+          helm repo index --url=https://99co.github.io/service-f/helm/ .
         fi
       - |
         if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_g/")" != "" ]; then
@@ -976,6 +986,11 @@ phases:
           docker tag $SERVICE_G_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
           docker push $SERVICE_G_URI:latest &&
           docker push $SERVICE_G_URI:$IMAGE_TAG &&
+          cd helm &&
+          helm lint helm/* &&
+          cd helm/ && 
+          helm package chart/ &&
+          helm repo index --url=https://99co.github.io/service-g/helm/ .
         fi
       - |
         if [ "$(git diff HEAD..$PREV | grep "diff --git" | grep "/services_h/")" != "" ]; then
@@ -986,6 +1001,11 @@ phases:
           docker tag $SERVICE_H_URI:latest $SERVICE_E_URI:$IMAGE_TAG &&
           docker push $SERVICE_H_URI:latest &&
           docker push $SERVICE_H_URI:$IMAGE_TAG &&
+          cd helm &&
+          helm lint helm/* &&
+          cd helm/ && 
+          helm package chart/ &&
+          helm repo index --url=https://99co.github.io/service-f/helm/ .
         fi
 ```
 # Helm Chart
