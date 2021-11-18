@@ -228,12 +228,8 @@ explanation. Feel free to add assumptions.
 - Weave Flux for CD that is aligned with GitOps principle
 - ElasticCloud for Observability such as realtime monitoring, analytics, APM, and logging.
 
-**Assumption**
 
-- The solution is deployed on AWS
-- Backend service is using golang and PHP
-- Frontend service is using reactjs
-- FrontEnd Service J, K, L, M and Backend service N, P, Q, R is legacy service because not leveraging API gateway.
+
 
 # Infrastructure Diagram
 Here's diagram for the propposed solution
@@ -242,8 +238,12 @@ Here's diagram for the propposed solution
 </p>
 Image Link: https://lucid.app/lucidchart/2237664e-6e48-4393-b33c-91216df6e8de/edit?viewport_loc=478%2C42%2C3328%2C1646%2C0_0&invitationId=inv_639fc3d3-d6ad-45d3-800e-a0f01f6a23bb
 
-# Summary
+# Assumption
 Based what have been designed on the diagram.
+- The solution is deployed on AWS
+- Backend service is using golang and PHP
+- Frontend service is using reactjs
+- FrontEnd Service J, K, L, M and Backend service N, P, Q, R is legacy service because not leveraging API gateway.
 - The infrastructure is deployed in AWS ap-southeast-1 region
 - Application, Redis, MySQL Database, and Kafka workload are deployed in two availability zones ap-southeast-1a and ap-southeast-1b to provide high availability, and fault tolerance
 - All our infrastructure is designed elastically. The infrastructure will scale seamlessly should the bussiness perform such as massive ads that bring high traffics from million users.
@@ -259,6 +259,8 @@ Based what have been designed on the diagram.
 - Our infrastructure and application will use ElasticCloud for observability. We will deploy filebeat as log aggregator and metricbeats as Daemon set. Filebeat will forward our log to Logstash. Logstash will parse our STDOUT using Grok Pattern to Elastic Document JSON to store in Elastic Search. So, we can query our them using Kibana to create Insightful Dashboard. We also will deployed APM Server to our EKS cluster.
 - Our Continous Integration will leverage Github as SCM, AWS Codepipeline and AWS Codebuild for Continous delivery to produce docker images and push to ECR
 - We will implement the Gitops for our continous delivery (Pull Model) using Flux. Flux will read our helm manifest that is stored on Github as the single source of truth. Flux will deployed desired state from Git to the actual state (k8s). It can also detect drift that will restore our actual state to the desired sate on git.
+- We only cover sample code in Readme, you can explore more details code based on their directory accordingly
+
 
 # Infrastructure Deployment
 All our infrastructure will be deployed using Terraform. To aligh with GitOps princle, We will leverage Atlantis as Terraform CI/CD. As we use Weave Flux for Application deployment, git will be the source of truth.
@@ -917,6 +919,8 @@ ENTRYPOINT ["/go/bin/service_e"]
 Our repositories contain 4 services. So, Our CI need to detect which service directory that has changed. Our strategy to handle this is
 - Check the different between Head and working directory in current commit
 - if the file is changed in service_e, then our Codepipeline will build, tag, and push our docker image service to ECR.
+- Perform helm lint, helm packages, and helm repo --index
+- We can make our repository as Helm repository using Github Pages. It is not recommended, it is solely for simplicity in this technical test.
 
 ```yaml
 version: 0.2
@@ -1449,6 +1453,8 @@ kind: Kustomization
 resources:
 - gotk-components.yaml
 - gotk-sync.yaml
+- namespace.yaml
+- nginx-ingress.yaml
 patches:
   - path: psp-patch.yaml
     target:
@@ -1485,7 +1491,59 @@ Heres' the workfow four our Helm Release using FLux
   <img src="img/fluxcd-helm-operator-diagram.png" alt="Flux CD Diagram">
 </p>
 
-Instead of editing the values.yaml from the chart source, we will create a HelmRelease definition
+# Flux Configuration
+Our flux folder structure would look like this:
+<p align="center">
+  <img src="img/flux-folder-structure.png" alt="Flux Folder structure">
+</p>
+Flux scan this sub-directory and determine which ressources definition they need to called.
+The Deployment directory contain our resources definition using Kustomize. It’s here that we build the code to setup our services e.g service e,f,g,hand toolchain Helm chart e.g ingress-nginx
+
+**flux/clusters/service.yaml
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta1
+kind: Kustomization
+metadata:
+  name: service
+  namespace: flux-system
+spec:
+  interval: 10m0s
+  dependsOn:
+    - name: common
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./deployment/services
+  prune: true
+  validation: client
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: service-e
+      namespace: 99c
+```
+
+**flux/clusters/toolchain.yaml
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta1
+kind: Kustomization
+metadata:
+  name: toolchain
+  namespace: flux-system
+spec:
+  interval: 10m0s
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./toolchain/ingress-nginx
+  prune: true
+  validation: client
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: DaemonSet
+      name: nginx-ingress-ingress-nginx-controller
+      namespace: ingress-nginx
+```
 ## Flux Helm  Release:
 ```yaml
 apiVersion: helm.fluxcd.io/v1
@@ -1502,6 +1560,71 @@ spec:
     git: git@github.com:99c/99c-service-e
     path: helm/
     ref: master
+  values:
+    image:
+      repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:<commit_hash>
+```
+# Sample Flux configuration for Service-e
+
+**deployment/services/sources/kustomization.yaml**
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flux-system
+resources:
+  - service-e.yaml
+```
+
+**deployment/services/sources/service-e.yaml**
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: service-e
+spec:
+  interval: 30m
+  url: https://99c.github.io/99co-backend/service-e/helm-chart/service-e.tgz
+```
+
+**deployment/services/service-e/kustomization.yaml**
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: 99c
+resources:
+  - namespace.yaml
+  - service-e.yaml
+```
+
+**deployment/services/service-e/namespace.yaml**
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: 99c
+```
+Instead to manually change the values.yaml, we will use Flux Helm release. We only change the value for image repository with their commit hash to mark new deployment for new images by Flux CD.
+
+**deployment/services/service-e/service-e.yaml**
+```yaml
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: service-e
+spec:
+  releaseName: service-e
+  chart:
+    spec:
+      chart: service-e
+      sourceRef:
+        kind: HelmRepository
+        name: service-e
+        namespace: flux-system
+      version: "1.0.0"
+  interval: 1h0m0s
+  install:
+    remediation:
+      retries: 3
   values:
     image:
       repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:<commit_hash>

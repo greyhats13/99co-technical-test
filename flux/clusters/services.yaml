@@ -1,0 +1,32 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta1
+kind: Kustomization
+metadata:
+  name: service
+  namespace: flux-system
+spec:
+  interval: 10m0s
+  dependsOn:
+    - name: common
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./deployment/services
+  prune: true
+  validation: client
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: service-e
+      namespace: 99c
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: service-f
+      namespace: 99c
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: service-g
+      namespace: 99c
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: service-h
+      namespace: 99c

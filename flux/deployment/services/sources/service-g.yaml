@@ -1,0 +1,7 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: service-g
+spec:
+  interval: 30m
+  url: https://99c.github.io/99co-backend/service-e/helm-chart/service-g.tgz
