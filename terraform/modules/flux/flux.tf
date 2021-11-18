@@ -81,7 +81,7 @@ resource "kubernetes_secret" "main" {
 
 # GitHub
 resource "github_repository" "main" {
-  name       = "helm-repository"
+  name       = var.gitub_repository
   visibility = "public"
   auto_init  = true
 }

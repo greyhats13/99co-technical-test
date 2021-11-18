@@ -641,7 +641,7 @@ resource "aws_eks_cluster" "cluster" {
 ```
 
 **modules/compute/eks/node-groups.tf**
-Our node group is for on-demand. We can also setup new nodegroup using Spot for Cost optimization.
+Our node group is on-demand.
 ```terraform
 resource "aws_iam_role" "node_role" {
   name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[1]}-role"
@@ -711,254 +711,25 @@ module "eks" {
 }
 ```
 
-# Toolchain Deployment
-After kubernetes cluster is provisioned. It will automatically all the toolchain such as Flux, Kong, Nginx, etc
-
-# Flux Installation in Kubernetes
-
-**modules/flux/fluxs.tf
-```terraform
-provider "kubernetes" {
-  host  = data.terraform_remote_state.k8s.outputs.do_k8s_endpoint
-  token = data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.token
-  cluster_ca_certificate = base64decode(
-    data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.cluster_ca_certificate
-  )
-}
-
-provider "kubectl" {}
-
-data "flux_install" "main" {
-  target_path = var.target_path
-}
-
-data "flux_sync" "main" {
-  target_path = var.target_path
-  url         = var.github_url
-  branch      = var.branch
-}
-
-# Kubernetes
-resource "kubernetes_namespace" "flux_system" {
-  metadata {
-    name = "flux-system"
-  }
-
-  lifecycle {
-    ignore_changes = [
-      metadata[0].labels,
-    ]
-  }
-}
-
-data "kubectl_file_documents" "install" {
-  content = data.flux_install.main.content
-}
-
-data "kubectl_file_documents" "sync" {
-  content = data.flux_sync.main.content
-}
-
-locals {
-  install = [for v in data.kubectl_file_documents.install.documents : {
-    data : yamldecode(v)
-    content : v
-    }
-  ]
-  sync = [for v in data.kubectl_file_documents.sync.documents : {
-    data : yamldecode(v)
-    content : v
-    }
-  ]
-}
-
-resource "kubectl_manifest" "install" {
-  for_each   = { for v in local.install : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
-  depends_on = [kubernetes_namespace.flux_system]
-  yaml_body  = each.value
-}
-
-resource "kubectl_manifest" "sync" {
-  for_each   = { for v in local.sync : lower(join("/", compact([v.data.apiVersion, v.data.kind, lookup(v.data.metadata, "namespace", ""), v.data.metadata.name]))) => v.content }
-  depends_on = [kubernetes_namespace.flux_system]
-  yaml_body  = each.value
-}
-
-resource "kubernetes_secret" "main" {
-  depends_on = [kubectl_manifest.install]
-
-  metadata {
-    name      = data.flux_sync.main.secret
-    namespace = data.flux_sync.main.namespace
-  }
-
-  data = {
-    identity       = tls_private_key.main.private_key_pem
-    "identity.pub" = tls_private_key.main.public_key_pem
-    known_hosts    = local.known_hosts
-  }
-}
-
-# GitHub
-resource "github_repository" "main" {
-  name       = "helm-repository"
-  visibility = "public"
-  auto_init  = true
-}
-
-resource "github_branch_default" "main" {
-  repository = github_repository.main.name
-  branch     = "main"
-}
-
-resource "github_repository_deploy_key" "main" {
-  title      = "production-cluster"
-  repository = github_repository.main.name
-  key        = tls_private_key.main.public_key_openssh
-  read_only  = true
-}
-
-resource "github_repository_file" "install" {
-  repository = github_repository.main.name
-  file       = data.flux_install.main.path
-  content    = data.flux_install.main.content
-  branch     = "main"
-}
-
-resource "github_repository_file" "sync" {
-  repository = github_repository.main.name
-  file       = data.flux_sync.main.path
-  content    = data.flux_sync.main.content
-  branch     = "main"
-}
-```
-
-**toolchain-deployment/flux/main.tf**
-```terraform
-terraform {
-  backend "s3" {
-    bucket  = "99c-prd-storage-s3-terraform"
-    region  = "ap-southeast-1"
-    key     = "99c-compute-flux-prd.tfstate"
-    profile = "99c-prd"
-  }
-}
-
-module "flux" {
-  source    = "../../modules/flux"
-  namespace = "flux-system"
-  github_url = "ssh://git@github.com/99c/99c-toolchain-flux.git"
-}
-```
-
 # Amazon RDS: MySQL
 Our Aurora MySQL is 5x times performance compared to general MySQL engine. It also has been designed elastically, so it can scale elastically should the business perform. We have implement AWS App Autoscaling for Aurora RDS Read Replica.
 Our database production also have been secured in transit using SQL so the application is enforced to use SSL connection and at rest using KMS to encrpyt the storages. Our database can only be accessed from internal VPC network.
 
 **modules/compute/rds/aurora.tf**
 ```terraform
-resource "aws_security_group" "sg" {
-  name        = "${var.unit}-${var.env}-${var.code}-${var.feature}-sg"
-  description = "Security Group for ${var.unit}-${var.env}-${var.code}-${var.feature}"
-  vpc_id      = data.terraform_remote_state.network.outputs.network_vpc_id
-  tags = {
-    Name      = "${var.unit}-${var.env}-${var.code}-${var.feature}-sg"
-    "Env"     = var.env
-    "Code"    = var.code
-    "Feature" = var.feature
-  }
-}
-
-resource "aws_security_group_rule" "sg_in_tcp" {
-  type              = "ingress"
-  from_port         = 3306
-  to_port           = 3306
-  protocol          = "tcp"
-  cidr_blocks       = [aws.vpc.cidr_blocks]
-  security_group_id = aws_security_group.sg.id
-  description       = "Allow ingress TCP 3306 for ${var.unit}-${var.env}-${var.code}-${var.feature}"
-}
-
-resource "aws_security_group_rule" "sg_eg_all" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.sg.id
-  description       = "Allow egress all protocol ${var.unit}-${var.env}-${var.code}-${var.feature}"
-}
-
-data "terraform_remote_state" "network" {
-  backend = "s3"
-  config = {
-    bucket  = "${var.unit}-${var.env}-storage-s3-terraform"
-    key     = "${var.unit}-network-${var.env}.tfstate"
-    region  = var.region
-    profile = "${var.unit}-${var.env}"
-  }
-}
-
-resource "aws_db_subnet_group" "db_subnet_group" {
-  name        = "${var.unit}-${var.env}-${var.code}-${var.feature}-db-subnet-group"
-  subnet_ids  = data.terraform_remote_state.network.outputs.network_db_subnet_id
-  description = "DB subnet group for ${var.unit}-${var.env}-${var.code}-${var.feature}"
-  tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-db-subnet-group"
-    "Env"     = var.env
-    "Code"    = var.code
-    "Feature" = var.feature
-  }
-}
-
-data "terraform_remote_state" "kms" {
-  backend = "s3"
-  config = {
-    bucket  = "${var.unit}-${var.env}-storage-s3-terraform"
-    key     = "${var.unit}-security-kms-${var.env}.tfstate"
-    region  = var.region
-    profile = "${var.unit}-${var.env}"
-  }
-}
-
-resource "random_password" "aurora_password" {
-  length           = 16
-  upper            = true
-  lower            = true
-  number           = true
-  special          = false
-  override_special = "_~!#$&*="
-  min_lower        = 2
-  min_upper        = 2
-  min_special      = 0
-  min_numeric      = 2
-}
-
 resource "aws_rds_cluster" "aurora_cluster" {
   cluster_identifier                  = "${var.unit}-${var.env}-${var.code}-${var.feature}-cluster-${var.region}"
-  engine_mode                         = "provisioned"
-  engine                              = "aurora-mysql"
-  engine_version                      = "5.7.mysql_aurora.2.10.0"
+  engine_mode                         = var.engine_mode
+  engine                              = var.engine
+  engine_version                      = var.engine_version
   availability_zones                  = [data.aws_availability_zones.az.names[0], data.aws_availability_zones.az.names[1]]
-  master_username                     = "root"
+  master_username                     = var.master_username
   master_password                     = random_password.aurora_password.result
-  port                                = 3306
+  port                                = var.port
   db_subnet_group_name                = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids              = [aws_security_group.sg.id]
-  iam_database_authentication_enabled = false
-  db_cluster_parameter_group_name     = aws_rds_cluster_parameter_group.cluster_parameter_group.id
-  backup_retention_period             = 5
-  copy_tags_to_snapshot               = true
-  storage_encrypted                   = true
-  kms_key_id                          = data.terraform_remote_state.kms.outputs.kms_key_arn
-  backtrack_window                    = 0
-  allow_major_version_upgrade         = true
-  enabled_cloudwatch_logs_exports     = ["error", "general", "slowquery"]
-  preferred_backup_window             = "07:00-09:00"
-  deletion_protection                 = true
-  apply_immediately                   = true
-  skip_final_snapshot                 = false
-  final_snapshot_identifier           = "${var.unit}-${var.env}-${var.code}-${var.feature}-final-snapshot"
+  enabled_cloudwatch_logs_exports     = var.enabled_cloudwatch_logs_exports
+  preferred_backup_window             = var.preferred_backup_window
   tags = {
     "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-cluster"
     "Env"     = var.env
@@ -966,7 +737,7 @@ resource "aws_rds_cluster" "aurora_cluster" {
     "Feature" = var.feature
   }
   lifecycle {
-    prevent_destroy = true
+    prevent_destroy = false
     ignore_changes = [
       engine_version
     ]
@@ -996,24 +767,16 @@ resource "aws_iam_role_policy_attachment" "monitoring_attach_policy" {
 }
 
 resource "aws_rds_cluster_instance" "aurora_instances" {
-  count                           = 2
+  count                           = var.number_of_instance
   identifier                      = "${var.unit}-${var.env}-${var.code}-${var.feature}-instance-${element(data.aws_availability_zones.az.names, count.index)}-${count.index}"
   cluster_identifier              = aws_rds_cluster.aurora_cluster.id
-  instance_class                  = "db.r5.xlarge"
+  instance_class                  = var.instance_class
   engine                          = aws_rds_cluster.aurora_cluster.engine
   engine_version                  = aws_rds_cluster.aurora_cluster.engine_version
   db_parameter_group_name         = aws_db_parameter_group.db_parameter_group.id
-  publicly_accessible             = false
-  copy_tags_to_snapshot           = aws_rds_cluster.aurora_cluster.copy_tags_to_snapshot
   promotion_tier                  = count.index
   availability_zone               = element(data.aws_availability_zones.az.names, count.index)
-  performance_insights_enabled    = true
-  performance_insights_kms_key_id = data.terraform_remote_state.kms.outputs.kms_key_arn
-  monitoring_interval             = 60
-  monitoring_role_arn             = aws_iam_role.monitoring_role.arn
-  auto_minor_version_upgrade      = true
-  apply_immediately               = true
-  ca_cert_identifier              = "rds-ca-2019"
+  ca_cert_identifier              = var.ca_cert_identifier
   tags = {
     "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}-instance-${element(data.aws_availability_zones.az.names, count.index)}-${count.index}"
     "Env"     = var.env
@@ -1023,11 +786,11 @@ resource "aws_rds_cluster_instance" "aurora_instances" {
 }
 
 resource "aws_appautoscaling_target" "autoscaling_target" {
-  service_namespace  = "rds"
-  scalable_dimension = "rds:cluster:ReadReplicaCount"
+  service_namespace  = var.service_namespace
+  scalable_dimension = var.scalable_dimension
   resource_id        = "cluster:${aws_rds_cluster.aurora_cluster.id}"
-  min_capacity       = 2
-  max_capacity       = 15
+  min_capacity       = var.min_capacity
+  max_capacity       = var.max_capacity
 }
 
 resource "aws_appautoscaling_policy" "autoscaling_policy" {
@@ -1035,51 +798,59 @@ resource "aws_appautoscaling_policy" "autoscaling_policy" {
   service_namespace  = aws_appautoscaling_target.autoscaling_target.service_namespace
   scalable_dimension = aws_appautoscaling_target.autoscaling_target.scalable_dimension
   resource_id        = aws_appautoscaling_target.autoscaling_target.resource_id
-  policy_type        = "TargetTrackingScaling"
+  policy_type        = var.policy_type
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
-      predefined_metric_type = "RDSReaderAverageDatabaseConnections"
+      predefined_metric_type = var.predefined_metric_type
     }
 
-    target_value       = 750
-    scale_in_cooldown  = 1800
-    scale_out_cooldown = 60
+    target_value       = var.target_value
+    scale_in_cooldown  = var.scale_in_cooldown
+    scale_out_cooldown = var.scale_out_cooldown
   }
 }
 ```
 
-# Elasticache Redis
-```terraform
-resource "aws_elasticache_replication_group" "elasticache" {
-  replication_group_id          = "${var.unit}-${var.env}-${var.code}-${var.feature}"
-  auth_token                    = random_password.elasticache_password.result
-  engine                        = "redis"
-  engine_version                = "6.x"
-  maintenance_window            = "sun:20:00-sun:21:00"
-  multi_az_enabled              = true
-  node_type                     = "cache.r5.xlarge"
-  parameter_group_name          = "default.redis6.x.cluster.on"
-  automatic_failover_enabled    = true
-  port                          = 6379
-  replication_group_description = "Redis cluster"
-  security_group_ids            = [aws_security_group.sg.id]
-  snapshot_window               = "18:00-19:00"
-  subnet_group_name             = aws_elasticache_subnet_group.subnet_group.name
-  at_rest_encryption_enabled    = true
-  kms_key_id                    = data.terraform_remote_state.kms.outputs.kms_key_arn
-  tags = {
-    "Name"    = "${var.unit}-${var.env}-${var.code}-${var.feature}"
-    "Env"     = var.env
-    "Code"    = var.code
-    "Feature" = var.feature
-  }
-  transit_encryption_enabled = true
+**cloud_deplyment/rds/main.tf**
 
-  cluster_mode {
-    num_node_groups         = 1
-    replicas_per_node_group = 1
+```terraform
+terraform {
+  backend "s3" {
+    bucket  = "99c-prd-storage-s3-terraform"
+    region  = "ap-southeast-1"
+    key     = "99c-compute-rds-aurora-prd.tfstate"
+    profile = "99c-prd"
   }
+}
+
+module "rds" {
+  source                              = "../../modules/compute/rds"
+  region                              = "ap-southeast-1"
+  unit                                = "99c"
+  env                                 = "prd"
+  code                                = "compute"
+  feature                             = "aurora"
+  parameter_group_family              = "aurora-mysql5.7"
+  engine_mode                         = "provisioned"
+  engine                              = "aurora-mysql"
+  engine_version                      = "5.7.mysql_aurora.2.10.0"
+  master_username                     = "root"
+  port                                = 3306
+  backup_retention_period             = 5
+  allow_major_version_upgrade         = true
+  enabled_cloudwatch_logs_exports     = ["error", "general", "slowquery"]
+  number_of_instance                  = 2 #for 1 write and 1 read
+  instance_class                      = "db.r5x.large"
+  monitoring_interval                 = 60
+  ca_cert_identifier                  = "rds-ca-2019"
+  scalable_dimension                  = "rds:cluster:ReadReplicaCount"
+  service_namespace                   = "rds"
+  min_capacity                        = 2
+  max_capacity                        = 15
+  policy_type                         = "TargetTrackingScaling"
+  predefined_metric_type              = "RDSReaderAverageDatabaseConnections"
+  target_value                        = 750  #750 connection for 16gb memory
 }
 ```
 
@@ -1340,7 +1111,7 @@ data:
    {{- range $key, $value := .Values.appConfig }}
    {{ $key }}: {{ $value | quote }}
    {{- end }}
-
+```
 **Secret**
 ```yaml
 apiVersion: v1
@@ -1395,7 +1166,7 @@ We must assign Kong on the ingress annotation.
 replicaCount: 2
 
 podAnnotations:
-  prometheus.io/scrape: "false"
+  prometheus.io/scrape: "true"
 
 image:
   repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99c-service-e-prd:latest
@@ -1509,55 +1280,31 @@ config:
 plugin: rate-limiting
 ```
 
-# Flux
-We can setup installation of Flux using Terraform to keep aligning with GitOps principle (Git must be source of truth).
-In this terraform script, we will bootstrapping Flux to our kubernetes cluster to deploy flux controller.
-Then, it will sync the Git repository that we provision here. Flux will sync to the path that we specified e.g helm/.
-```terraform
-provider "aws" {
-  region  = var.region
-  profile = "${var.unit}-${var.env}"
-}
+# Flux CD
+After kubernetes cluster is provisioned. It will automatically all the toolchain such as Flux, Kong, Nginx, etc
 
-provider "flux" {}
+# Flux Installation in Kubernetes using Terraform
+We will install Flux in our kuberetes cluster using Terraform after Kubernetes cluster is provisioned. So we don't have to manually install them via Flux CLI.
+
+**modules/flux/fluxs.tf
+```terraform
+provider "kubernetes" {
+  host  = data.terraform_remote_state.k8s.outputs.do_k8s_endpoint
+  token = data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.token
+  cluster_ca_certificate = base64decode(
+    data.terraform_remote_state.k8s.outputs.do_k8s_kubeconfig0.cluster_ca_certificate
+  )
+}
 
 provider "kubectl" {}
 
-# The kubernetes credentials such certificate can be get from our Terraform EKS output.
-# assign them to provider kubernetes args
-provider "kubernetes" {
-  host                   = aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.cluster.certificate_authority[0].data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1alpha1"
-    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.cluster.name]
-    command     = "aws"
-  }
-}
-
-provider "github" {
-  owner = var.github_owner
-  token = var.github_token
-}
-
-# SSH
-locals {
-  known_hosts = "github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ=="
-}
-
-resource "tls_private_key" "main" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-# Flux
 data "flux_install" "main" {
   target_path = var.target_path
 }
 
 data "flux_sync" "main" {
   target_path = var.target_path
-  url         = "ssh://git@github.com/99c/helm-repository.git"
+  url         = var.github_url
   branch      = var.branch
 }
 
@@ -1624,7 +1371,7 @@ resource "kubernetes_secret" "main" {
 
 # GitHub
 resource "github_repository" "main" {
-  name       = "helm-repository"
+  name       = var.gitub_repository
   visibility = "public"
   auto_init  = true
 }
@@ -1640,18 +1387,102 @@ resource "github_repository_deploy_key" "main" {
   key        = tls_private_key.main.public_key_openssh
   read_only  = true
 }
-
-resource "github_repository_file" "install" {
+# Customize Flux
+resource "github_repository_file" "kustomize" {
   repository = github_repository.main.name
-  file       = data.flux_install.main.path
-  content    = data.flux_install.main.content
-  branch     = "main"
+  file       = data.flux_sync.main.kustomize_path
+  content    = file("${path.module}/kustomization.yaml")
+  branch     = var.branch
 }
 
-resource "github_repository_file" "sync" {
+#Set PSP rule for Flux Deployment
+resource "github_repository_file" "psp_patch" {
   repository = github_repository.main.name
-  file       = data.flux_sync.main.path
-  content    = data.flux_sync.main.content
-  branch     = "main"
+  file       = "${dirname(data.flux_sync.main.kustomize_path)}/psp-patch.yaml"
+  content    = file("${path.module}/psp-patch.yaml")
+  branch     = var.branch
 }
+```
+
+**toolchain-deployment/flux/main.tf**
+```terraform
+terraform {
+  backend "s3" {
+    bucket  = "99c-prd-storage-s3-terraform"
+    region  = "ap-southeast-1"
+    key     = "99c-compute-flux-prd.tfstate"
+    profile = "99c-prd"
+  }
+}
+
+module "flux" {
+  source    = "../../modules/flux"
+  namespace = "flux-system"
+  github_url = "ssh://git@github.com/99c/99c-toolchain-flux.git"
+}
+```
+
+we can also  customize our Flux setting 
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- gotk-components.yaml
+- gotk-sync.yaml
+patches:
+  - path: psp-patch.yaml
+    target:
+      kind: Deployment
+```
+PSP_Patch
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: all-flux-components
+spec:
+  template:
+    metadata:
+      annotations:
+        # Required by Kubernetes node autoscaler
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      securityContext:
+        runAsUser: 10000
+        fsGroup: 1337
+      containers:
+        - name: manager
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+```
+Heres' the workfow four our Helm Release using FLux
+<p align="center">
+  <img src="img/fluxcd-helm-operator-diagram.png" alt="Flux CD Diagram">
+</p>
+
+Instead of editing the values.yaml from the chart source, we will create a HelmRelease definition
+## Flux Helm  Release:
+```yaml
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: 99co-service-e
+  namespace: 99c
+  annotations:
+    fluxcd.io/automated: "true"
+    filter.fluxcd.io/chart-image: glob:prd-*
+spec:
+  releaseName: 99co-service-e
+  chart:
+    git: git@github.com:99c/99c-service-e
+    path: helm/
+    ref: master
+  values:
+    image:
+      repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-e-prd:<commit_hash>
 ```

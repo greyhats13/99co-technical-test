@@ -5,7 +5,7 @@
 replicaCount: 1
 
 podAnnotations:
-  prometheus.io/scrape: "false"
+  prometheus.io/scrape: "true"
 
 image:
   repository: xxxxxxxxxxxx.dkr.ecr.ap-southeast-1.amazonaws.com/99co-service-g-prd:latest

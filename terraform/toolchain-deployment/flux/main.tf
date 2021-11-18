@@ -8,7 +8,9 @@ terraform {
 }
 
 module "flux" {
-  source    = "../../modules/flux"
-  namespace = "flux-system"
-  github_url = "ssh://git@github.com/99c/99c-toolchain-flux.git"
+  source           = "../../modules/flux"
+  namespace        = "flux-system"
+  gitub_repository = "99c-flux-configuration"
+  github_url       = "ssh://git@github.com/99c/99c-toolchain-flux.git"
+  target_path      = "cluster/prd"
 }
