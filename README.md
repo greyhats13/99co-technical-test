@@ -407,7 +407,7 @@ We also have configured the routing to NAT and Internet Gateway.
 It contains the terraform code for module and cloud deployment
 ### Network Module
 All the code on network modules. This module will be invoke for cloud network deployment
-**modules/network/variables.tf**
+**terraform/modules/network/variables.tf**
 ```terraform
 
 **modules/network/vpc.tf**
@@ -425,7 +425,7 @@ resource "aws_vpc" "vpc" {
   }
 }
 ```
-**modules/network/subnet.tf**
+**terraform/modules/network/subnet.tf**
 ```terraform
 data "aws_availability_zones" "az" {
   state = "available"
@@ -493,7 +493,7 @@ resource "aws_subnet" "data" {
 }
 ```
 
-**modules/network/igw.tf**
+**terraform/modules/network/igw.tf**
 ```terraform
 resource "aws_internet_gateway" "igw" {
   vpc_id   = aws_vpc.vpc.id
@@ -508,7 +508,7 @@ resource "aws_internet_gateway" "igw" {
 }
 ```
 
-**modules/network/nat.tf**
+**terraform/modules/network/nat.tf**
 ```terraform
 resource "aws_eip" "eip" {
   count = var.total_eip
@@ -539,7 +539,7 @@ resource "aws_nat_gateway" "nat" {
 }
 ```
 
-**modules/network/route.tf**
+**terraform/modules/network/route.tf**
 ```terraform
 #Public Route Table
 resource "aws_route_table" "public_rt" {
@@ -645,7 +645,7 @@ It contains the terraform code for module and cloud deployment
 ### EKS Module
 The terraform code is based on our infrastructure diagram. In this code, we have implemented Node autoscaling with minimum 4 nodes and maximumm 256 nodes. It will scale should the business perform when running massive ads. Our EKS infrastructure will guarantee SLA 99.9% from our infrastructure deisgn.
 
-**modules/compute/eks/eks.tf**
+**terraform/modules/compute/eks/eks.tf**
 ```terraform
 resource "aws_iam_role" "eks_role" {
   name = "${var.unit}-${var.env}-${var.code}-${var.feature}-${var.sub[0]}-role"
@@ -695,7 +695,7 @@ resource "aws_eks_cluster" "cluster" {
 }
 ```
 
-**modules/compute/eks/node-groups.tf**
+**terraform/modules/compute/eks/node-groups.tf**
 Our node group is on-demand.
 ```terraform
 resource "aws_iam_role" "node_role" {
@@ -753,7 +753,7 @@ resource "aws_eks_node_group" "ondemand" {
 }
 ```
 
-**cloud_deployment/eks/main.tf**
+**terraform/cloud_deployment/eks/main.tf**
 Here's the implementation using module EKS.
 ```terraform
 module "eks" {
@@ -770,7 +770,7 @@ module "eks" {
 Our Aurora MySQL is 5x times performance compared to general MySQL engine. It also has been designed elastically, so it can scale elastically should the business perform. We have implement AWS App Autoscaling for Aurora RDS Read Replica.
 Our database production also have been secured in transit using SQL so the application is enforced to use SSL connection and at rest using KMS to encrpyt the storages. Our database can only be accessed from internal VPC network.
 
-**modules/compute/rds/aurora.tf**
+**terraform/modules/compute/rds/aurora.tf**
 ```terraform
 resource "aws_rds_cluster" "aurora_cluster" {
   cluster_identifier                  = "${var.unit}-${var.env}-${var.code}-${var.feature}-cluster-${var.region}"
@@ -867,7 +867,7 @@ resource "aws_appautoscaling_policy" "autoscaling_policy" {
 }
 ```
 
-**cloud_deplyment/rds/main.tf**
+**terraform/cloud_deplyment/rds/main.tf**
 
 ```terraform
 terraform {
@@ -914,6 +914,222 @@ Our Continous Integration leverage AWS codepipeline with Codebuild and Github as
 
 Our Continous Delivery will adopt GitOps principle and Pull Model where Git would be the single source of truth. Our Continous Integration will use AWS Codepipeline and Codebuild to produce the artifact. Our CD will use Weave Flux. We will bootstrapping flux to our K8s cluster so Flux controller such as Source Controller and Helm controller will handle the deployment automatically. Flux will keep sync to our Github to examine the desired state, and automatically will deploy to the actual state  to our k8s cluster.
 Here's our CI/CD diagram for the proposed solution
+
+## Add new service using Terraform
+As we add new service, we will need to provisione our Continous integration for our services such as Codebuild, codepipeline, and ECR repository for our services using Terraform.
+
+**terraform/modules/service/codebuild.tf**
+```terraform
+resource "aws_iam_role" "codebuild_role" {
+  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-codebuild-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "codebuild.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "codebuild_attach_policy" {
+  role       = aws_iam_role.codebuild_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" #not best practise, for testing purpose
+}
+
+resource "aws_codebuild_project" "build_project" {
+
+  name          = "${var.unit}-${var.env}-${var.code}-${var.feature}"
+  service_role  = aws_iam_role.codebuild_role.arn
+  build_timeout = 60
+
+  artifacts {
+    type = "CODEPIPELINE"
+  }
+
+  environment {
+    compute_type    = "BUILD_GENERAL1_SMALL"
+    image           = "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+    type            = "LINUX_CONTAINER"
+    privileged_mode = true
+    environment_variable {
+      name  = "STAGE"
+      value = "BUILD"
+    }
+
+    environment_variable {
+      name  = "AWS_DEFAULT_REGION"
+      value = var.region
+    }
+
+    environment_variable {
+      name = "SERVICE_NAME"
+      value = "${var.unit}-${var.env}-${var.code}-${var.feature}"
+    }
+  }
+
+  cache {
+    type = "LOCAL"
+    modes = [
+      "LOCAL_CUSTOM_CACHE",
+      "LOCAL_DOCKER_LAYER_CACHE",
+      "LOCAL_SOURCE_CACHE"
+    ]
+  }
+
+  source {
+    type      = "CODEPIPELINE"
+    buildspec = "buildspec.yml"
+  }
+
+  vpc_config {
+    vpc_id             = data.terraform_remote_state.network.outputs.network_vpc_id
+    subnets            = data.terraform_remote_state.network.outputs.network_app_subnet_id
+    security_group_ids = [aws_security_group.sg.id]
+  }
+}
+```
+
+**terraform/modules/service/codepipeline.tf**
+```terraform
+resource "aws_iam_role" "codepipeline_role" {
+  name = "${var.unit}-${var.env}-${var.code}-${var.feature}-codepipeline-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "codepipeline.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "codepipeline_attach_policy" {
+  role       = aws_iam_role.codepipeline_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" #not best practise, for testing purpose
+}
+
+resource "aws_codepipeline" "codepipeline" {
+  name       = "${var.unit}-${var.env}-${var.code}-${var.feature}"
+  role_arn   = aws_iam_role.codepipeline_role.arn
+  depends_on = [aws_codebuild_project.build_project]
+
+  artifact_store {
+    location = data.terraform_remote_state.s3.outputs.s3_bucket_name
+    type     = "S3"
+  }
+
+  stage {
+    name = "Source"
+    action {
+      name             = "Source"
+      category         = "Source"
+      owner            = "ThirdParty"
+      provider         = "GitHub"
+      version          = "1"
+      output_artifacts = ["Source"]
+
+      configuration = {
+        Owner                = data.aws_ssm_parameter.github_owner.value
+        OAuthToken           = data.aws_ssm_parameter.github_token.value
+        Repo                 = github_repository.repo[0].name
+        Branch               = "main"
+        PollForSourceChanges = "false"
+      }
+    }
+  }
+
+  stage {
+    name = "Build"
+    action {
+      name             = "Build"
+      category         = "Build"
+      owner            = "AWS"
+      provider         = "CodeBuild"
+      input_artifacts  = ["Source"]
+      output_artifacts = ["BuildArtifact"]
+      version          = "1"
+
+      configuration = {
+        ProjectName = aws_codebuild_project.build_project.name
+      }
+    }
+  }
+}
+```
+
+**terraform/modules/service/ecr.tf**
+```terraform
+##### ECR
+resource "aws_ecr_repository" "ecr" {
+  name        = "${var.unit}-${var.env}-${var.code}-${var.feature}"
+}
+
+resource "aws_ecr_lifecycle_policy" "ecr_policy" {
+  repository = aws_ecr_repository.ecr_php.name
+  policy     = data.template_file.ecr_lifecycle_policy.rendered
+}
+```
+
+**terraform/modules/service/github.tf**
+```terraform
+provider "github" {
+  token        = data.aws_ssm_parameter.github_token.value
+  owner        = data.aws_ssm_parameter.github_owner.value
+}
+
+resource "aws_codepipeline_webhook" "codepipeline_webhook" {
+  name            = "webhook-codepipeline-${var.unit}-${var.env}-${var.code}-${var.feature}"
+  authentication  = "GITHUB_HMAC"
+  target_action   = "Source"
+  target_pipeline = aws_codepipeline.codepipeline.name
+
+  authentication_configuration {
+    secret_token = "webhook-secret-${var.unit}-${var.env}-${var.code}-${var.feature}"
+  }
+
+  filter {
+    json_path    = "$.ref"
+    match_equals = "refs/heads/main"
+  }
+}
+
+resource "github_repository_webhook" "github_webhook" {
+  repository = "99co-backend"
+  configuration {
+    url          = aws_codepipeline_webhook.codepipeline_webhook.url
+    content_type = "json"
+    insecure_ssl = true
+    secret       = "webhook-secret-${var.unit}-${var.env}-${var.code}-${var.feature}"
+  }
+  events = ["push"]
+}
+```
+
+Here's the example adding service-e:
+
+**terraform/service_deployment/service-e/main.tf**
+```terraform
+module "deployment" {
+  source                   = "../../modules/service"
+  region                   = "ap-southeast-1"
+  unit                     = "99c"
+  env                      = "prd"
+  code                     = "service"
+  feature                  = "e"
+}
+```
+
 <p align="center">
   <img src="img/ci-cd-diagram.png" alt="CI CD Diagram">
 </p>
@@ -935,7 +1151,7 @@ For instance for backend repository will contain four folder which is
 
 Each service folder will have their own Dockerfile.
 
-Sample Dockerfile for service E that located at /service_e/Dockerfile:
+Sample Dockerfile for service E that located at /service_e/Dockerfile using Golang.
 ```dockerfile
 FROM golang:1.15.2-alpine3.12 AS builder
 
@@ -969,7 +1185,7 @@ ENTRYPOINT ["/go/bin/service_e"]
 ```
 
 # Buildspec for our CI in Codebuild
-Our repositories contain 4 services. So, Our CI need to detect which service directory that has changed. Our strategy to handle this is
+Each repositories contain 4 services. So, Our CI need to detect which service directory that has changed. Our strategy to handle this is
 - Check the different between Head and working directory in current commit
 - if the file is changed in service_e, then our Codepipeline will build, tag, and push our docker image service to ECR.
 - Perform helm lint, helm packages, and helm repo --index

@@ -7,10 +7,6 @@ terraform {
   }
 }
 
-data "template_file" "iam_role_task_policy" {
-  template = file("task_policy.json")
-}
-
 module "deployment" {
   source                   = "../../modules/service"
   region                   = "ap-southeast-1"
