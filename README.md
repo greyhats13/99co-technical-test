@@ -289,13 +289,17 @@ Our Continous Integation will need to have conditional to detect changes
 - All of our infrastructure must be elastic. It can scale automatically based on resources usage as the bussiness perform e.g running massive ads or event. The scaling must be placed in every layer such as Application workload, Horizontal Pod Autoscaling, Database Autoscaling,etc. So there will be no scenario our application is lack of resource.
 - For mission critical, our infrastructure mas have Disaster Recovery Plan. To achieve high Recovery Point Objective and Recovery Time Obective under five minutes, we will implement Multi Site Strategy where our infrastructure is replicated to another region with the same workload class and Perform Region DNS Healthcheck (Route53).
 - Our application must be able to self-healing due to any issues or error. We will deploy as container (docker) in kubernetes. Our docker images must align with DevOps Lean principle. We are using Alpine for our backend for Lean architecture. So, it can build, deploy, and heal faster for pod scheduling.
-- We will implement circuit breaker and advance deployment strategy such as canary that can shift traffic to new application gradually. Should the application encounter major bugs, it won't impact that much because we can rollback to previous version.
+- We will implement circuit breaker and advance deployment strategy such as canary that can shift traffic to new application gradually. Should the application encounter major bugs, it won't impact that much because we can rollback to previous version. We need to implement Istio for canary deployment using Flagger for traffic shifting.
 - We will secure our infrastructure at every layer as possible. Good security will mantain good SLA form any malicious actor that can compromise our application.
+  - Strict Firewall in Security Group
+  - Secure data in transit (SSL/TLS) and at rest by encript our storages
+  - Implement API Gateway for rate limit, IP restriction, WAF,etc
+  - Implement Service Mesh using Istio, so we can secure our inter-service communication even using SSL/TLS. also provide end-to-end visibility  for fine-grained metrics. Istio also can help for traffic shifting.
 - Increase application performant database and cache, and also message broker(Kafka) to decoupling our services.
 
 # IMPLEMENTATION OF THE DESIGN
 
-Here is the part for implementation. Including code and fine-grained design. It won't cover all the details such as Disaster recovery Plan for code implementaiton,etc.
+Here is the part for implementation. Including code and fine-grained design. It won't cover all the details such as Disaster recovery Plan, Canary Deployment Istio for code implementaiton,etc.
 
 ## KEYPOINT
 - Application, Redis, MySQL Database, and Kafka workload are deployed in two availability zones ap-southeast-1a and ap-southeast-1b to provide high availability, and fault tolerance
